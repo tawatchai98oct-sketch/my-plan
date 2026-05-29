@@ -120,8 +120,8 @@
     }
 
     .day {
-      min-height: 48px;
-      padding: 15px 5px 5px;
+      min-height: 72px;
+      padding: 16px 4px 4px;
       border: 1px solid #eee;
       font-size: 13px;
       cursor: pointer;
@@ -148,10 +148,6 @@
       background: #dcdcdc;
     }
 
-    .past-date .note-preview {
-      color: #666;
-    }
-
     .today {
       background: #fff3cd;
       border: 2px solid #d39e00;
@@ -166,27 +162,66 @@
       right: 5px;
       font-size: 10px;
       line-height: 1;
+      z-index: 5;
     }
 
-    .note-preview {
-      display: block;
-      margin-top: 4px;
-      font-size: 10px;
-      color: #0056b3;
+    .activity-bar {
+      position: absolute;
+      left: -1px;
+      right: -1px;
+      height: 12px;
+      padding: 0 5px;
+      color: white;
+      border-radius: 0;
+      font-size: 8px;
+      line-height: 12px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      text-align: left;
+      z-index: 2;
     }
 
-    .has-note::after {
-      content: "";
-      width: 6px;
-      height: 6px;
-      background: #007bff;
-      border-radius: 50%;
-      position: absolute;
-      bottom: 4px;
+    .bar-color-0 {
+      background: #2563eb;
+    }
+
+    .bar-color-1 {
+      background: #16a34a;
+    }
+
+    .bar-color-2 {
+      background: #dc2626;
+    }
+
+    .bar-color-3 {
+      background: #9333ea;
+    }
+
+    .bar-color-4 {
+      background: #ea580c;
+    }
+
+    .bar-color-5 {
+      background: #0891b2;
+    }
+
+    .range-segment-start .activity-bar.segment-start {
+      left: 4px;
+      border-top-left-radius: 7px;
+      border-bottom-left-radius: 7px;
+    }
+
+    .range-segment-end .activity-bar.segment-end {
       right: 4px;
+      border-top-right-radius: 7px;
+      border-bottom-right-radius: 7px;
+    }
+
+    .range-segment-single .activity-bar.segment-single {
+      left: 4px;
+      right: 4px;
+      border-radius: 7px;
     }
 
     .modal-bg {
@@ -201,8 +236,10 @@
 
     .modal {
       background: white;
-      width: 90%;
-      max-width: 420px;
+      width: 94%;
+      max-width: 760px;
+      max-height: 88vh;
+      overflow-y: auto;
       border-radius: 10px;
       padding: 20px;
       box-shadow: 0 3px 15px rgba(0, 0, 0, 0.25);
@@ -210,22 +247,86 @@
 
     .modal h3 {
       margin-top: 0;
+      margin-bottom: 12px;
     }
 
-    textarea {
-      width: 100%;
-      min-height: 120px;
-      resize: vertical;
+    .modal-help {
+      margin: 0 0 12px;
+      font-size: 12px;
+      color: #666;
+      line-height: 1.35;
+    }
+
+    .activity-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .activity-row {
+      display: grid;
+      grid-template-columns: 34px 1.5fr 1fr 1fr 42px;
+      gap: 8px;
+      align-items: end;
       padding: 10px;
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+    }
+
+    .activity-number {
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      color: #374151;
+    }
+
+    .field-group label {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 12px;
+      font-weight: bold;
+      color: #444;
+    }
+
+    .field-group input {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
       font-size: 14px;
-      font-family: Arial, sans-serif;
+    }
+
+    .remove-activity-btn {
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 6px;
+      background: #fee2e2;
+      color: #991b1b;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .add-activity-btn {
+      margin-top: 12px;
+      padding: 9px 12px;
+      border: none;
+      border-radius: 6px;
+      background: #111827;
+      color: white;
+      cursor: pointer;
+      font-size: 14px;
     }
 
     .modal-actions {
       display: flex;
       justify-content: flex-end;
       gap: 8px;
-      margin-top: 12px;
+      margin-top: 14px;
     }
 
     .modal-actions button {
@@ -235,7 +336,9 @@
       cursor: pointer;
     }
 
-    .modal-actions button:disabled {
+    .modal-actions button:disabled,
+    .add-activity-btn:disabled,
+    .remove-activity-btn:disabled {
       opacity: 0.6;
       cursor: not-allowed;
     }
@@ -263,6 +366,19 @@
     @media (max-width: 800px) {
       .year-grid {
         grid-template-columns: repeat(2, 1fr);
+      }
+
+      .activity-row {
+        grid-template-columns: 28px 1fr;
+      }
+
+      .activity-row .field-group {
+        grid-column: 2 / 3;
+      }
+
+      .remove-activity-btn {
+        grid-column: 2 / 3;
+        width: 100%;
       }
     }
 
@@ -324,18 +440,27 @@
     <div class="modal">
       <h3 id="modalDate"></h3>
 
-      <textarea id="noteInput" placeholder="Write schedule or plan here..."></textarea>
+      <p class="modal-help">
+        Add one or more activities. Each activity can have its own start date and end date. Save once to show multiple bars.
+      </p>
+
+      <div id="activityList" class="activity-list"></div>
+
+      <button type="button" class="add-activity-btn" id="addActivityButton">+ Add Activity</button>
 
       <div class="modal-actions">
-        <button type="button" class="delete-btn" id="deleteButton">Delete</button>
+        <button type="button" class="delete-btn" id="deleteButton">Delete All</button>
         <button type="button" class="close-btn" id="cancelButton">Cancel</button>
-        <button type="button" class="save-btn" id="saveButton">Save</button>
+        <button type="button" class="save-btn" id="saveButton">Save All</button>
       </div>
     </div>
   </div>
 
   <script>
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwHUmxDQ6GaMJWKRTrxcin5g-UrrwKIOodInRKKnoCpbINW6_gCq0eSDSxQO7R8eizIyg/exec";
+
+    const ACTIVITIES_PREFIX = "__ACTIVITIES_V2__";
+    const OLD_RANGE_PREFIX = "__RANGE_ACTIVITY__";
 
     const monthNames = [
       "January", "February", "March", "April",
@@ -351,17 +476,20 @@
 
     const modalBg = document.getElementById("modalBg");
     const modalDate = document.getElementById("modalDate");
-    const noteInput = document.getElementById("noteInput");
+    const activityList = document.getElementById("activityList");
 
+    const addActivityButton = document.getElementById("addActivityButton");
     const saveButton = document.getElementById("saveButton");
     const deleteButton = document.getElementById("deleteButton");
     const cancelButton = document.getElementById("cancelButton");
 
     let currentYear = new Date().getFullYear();
     let selectedDateKey = "";
+    let selectedSourceKeys = [];
     let notesByDate = {};
     let notesCacheByYear = {};
     let dateCellByKey = {};
+    let activitiesByDate = {};
     let isBusy = false;
 
     yearInput.value = currentYear;
@@ -386,12 +514,21 @@
       window.print();
     });
 
+    addActivityButton.addEventListener("click", function () {
+      addActivityRow({
+        id: createActivityId(),
+        title: "",
+        start: selectedDateKey,
+        end: selectedDateKey
+      });
+    });
+
     saveButton.addEventListener("click", function () {
-      saveNote();
+      saveActivities();
     });
 
     deleteButton.addEventListener("click", function () {
-      deleteNote();
+      deleteSelectedActivities();
     });
 
     cancelButton.addEventListener("click", function () {
@@ -425,7 +562,7 @@
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
         if (modalBg.style.display === "flex") {
           event.preventDefault();
-          saveNote();
+          saveActivities();
         }
       }
     });
@@ -449,7 +586,7 @@
           renderCalendar(year);
 
           const count = Object.keys(notesByDate).length;
-          setStatus("Loaded from Google Sheet. Notes found: " + count, "success");
+          setStatus("Loaded from Google Sheet. Records found: " + count, "success");
 
           return notesByDate;
         })
@@ -464,6 +601,7 @@
     function renderCalendar(year) {
       calendar.innerHTML = "";
       dateCellByKey = {};
+      rebuildActivitiesMap();
 
       const fragment = document.createDocumentFragment();
 
@@ -503,7 +641,7 @@
           dateCell.className = "day";
 
           const dateKey = createDateKey(year, month, day);
-          const savedNote = notesByDate[dateKey] || "";
+          const activitiesForDate = activitiesByDate[dateKey] || [];
 
           dateCell.dataset.dateKey = dateKey;
           dateCellByKey[dateKey] = dateCell;
@@ -525,20 +663,24 @@
             dateCell.classList.add("today");
           }
 
-          if (savedNote) {
-            dateCell.classList.add("has-note");
-          }
-
           const dateNumber = document.createElement("span");
           dateNumber.className = "date-number";
           dateNumber.textContent = String(day);
           dateCell.appendChild(dateNumber);
 
-          if (savedNote) {
-            const preview = document.createElement("span");
-            preview.className = "note-preview";
-            preview.textContent = savedNote;
-            dateCell.appendChild(preview);
+          activitiesForDate.slice(0, 4).forEach(function (activityInfo, index) {
+            addActivityBar(dateCell, activityInfo, year, month, day, totalDays, index);
+          });
+
+          if (activitiesForDate.length > 4) {
+            const moreBar = document.createElement("span");
+            moreBar.className = "activity-bar bar-color-5 segment-single";
+            moreBar.style.top = "64px";
+            moreBar.style.left = "4px";
+            moreBar.style.right = "4px";
+            moreBar.style.borderRadius = "7px";
+            moreBar.textContent = "+" + String(activitiesForDate.length - 4) + " more";
+            dateCell.appendChild(moreBar);
           }
 
           dateCell.addEventListener("click", function () {
@@ -555,30 +697,560 @@
       calendar.appendChild(fragment);
     }
 
-    function updateOneDateCell(dateKey) {
-      const dateCell = dateCellByKey[dateKey];
+    function addActivityBar(dateCell, activityInfo, year, month, day, totalDays, stackIndex) {
+      const dateKey = createDateKey(year, month, day);
+      const dayOfWeek = new Date(year, month, day).getDay();
 
-      if (!dateCell) {
-        renderCalendar(currentYear);
+      const isRangeStart = dateKey === activityInfo.start;
+      const isRangeEnd = dateKey === activityInfo.end;
+      const isWeekStart = dayOfWeek === 0;
+      const isWeekEnd = dayOfWeek === 6;
+      const isMonthStart = day === 1;
+      const isMonthEnd = day === totalDays;
+
+      const isSegmentStart = isRangeStart || isWeekStart || isMonthStart;
+      const isSegmentEnd = isRangeEnd || isWeekEnd || isMonthEnd;
+
+      const bar = document.createElement("span");
+      bar.className =
+        "activity-bar bar-color-" +
+        String(activityInfo.colorIndex % 6);
+
+      if (isSegmentStart && isSegmentEnd) {
+        bar.classList.add("segment-single");
+        bar.style.left = "4px";
+        bar.style.right = "4px";
+        bar.style.borderRadius = "7px";
+      } else {
+        if (isSegmentStart) {
+          bar.classList.add("segment-start");
+          bar.style.left = "4px";
+          bar.style.borderTopLeftRadius = "7px";
+          bar.style.borderBottomLeftRadius = "7px";
+        }
+
+        if (isSegmentEnd) {
+          bar.classList.add("segment-end");
+          bar.style.right = "4px";
+          bar.style.borderTopRightRadius = "7px";
+          bar.style.borderBottomRightRadius = "7px";
+        }
+      }
+
+      bar.style.top = String(20 + stackIndex * 13) + "px";
+      bar.title = activityInfo.title;
+
+      if (isSegmentStart) {
+        bar.textContent = activityInfo.title;
+      }
+
+      dateCell.appendChild(bar);
+    }
+
+    function rebuildActivitiesMap() {
+      activitiesByDate = {};
+
+      const records = getAllActivityRecords();
+
+      records.forEach(function (record, recordIndex) {
+        record.activities.forEach(function (activity, activityIndex) {
+          if (!activity.title || !isValidDateKey(activity.start) || !isValidDateKey(activity.end)) {
+            return;
+          }
+
+          if (compareDateKeys(activity.end, activity.start) < 0) {
+            return;
+          }
+
+          const dateKeys = getDateKeysInRange(activity.start, activity.end);
+
+          dateKeys.forEach(function (dateKey) {
+            if (!activitiesByDate[dateKey]) {
+              activitiesByDate[dateKey] = [];
+            }
+
+            activitiesByDate[dateKey].push({
+              sourceKey: record.sourceKey,
+              id: activity.id,
+              title: activity.title,
+              start: activity.start,
+              end: activity.end,
+              colorIndex: (recordIndex + activityIndex) % 6
+            });
+          });
+        });
+      });
+    }
+
+    function getAllActivityRecords() {
+      const records = [];
+
+      Object.keys(notesByDate).forEach(function (sourceKey) {
+        const parsed = parseStoredValue(notesByDate[sourceKey]);
+
+        if (parsed.type === "activities") {
+          records.push({
+            sourceKey: sourceKey,
+            activities: parsed.activities
+          });
+        }
+      });
+
+      return records;
+    }
+
+    function openModal(year, month, day) {
+      selectedDateKey = createDateKey(year, month, day);
+      selectedSourceKeys = getSourceKeysTouchingDate(selectedDateKey);
+
+      modalDate.textContent = day + " " + monthNames[month] + " " + year;
+      activityList.innerHTML = "";
+
+      const activitiesForPopup = [];
+
+      selectedSourceKeys.forEach(function (sourceKey) {
+        const parsed = parseStoredValue(notesByDate[sourceKey]);
+
+        if (parsed.type !== "activities") {
+          return;
+        }
+
+        parsed.activities.forEach(function (activity) {
+          if (dateKeyInRange(selectedDateKey, activity.start, activity.end)) {
+            activitiesForPopup.push({
+              id: activity.id || createActivityId(),
+              title: activity.title || "",
+              start: activity.start || selectedDateKey,
+              end: activity.end || selectedDateKey,
+              originalSourceKey: sourceKey
+            });
+          }
+        });
+      });
+
+      if (activitiesForPopup.length === 0) {
+        activitiesForPopup.push({
+          id: createActivityId(),
+          title: "",
+          start: selectedDateKey,
+          end: selectedDateKey,
+          originalSourceKey: ""
+        });
+      }
+
+      activitiesForPopup.forEach(function (activity) {
+        addActivityRow(activity);
+      });
+
+      modalBg.style.display = "flex";
+
+      const firstInput = activityList.querySelector(".activity-title-input");
+      if (firstInput) {
+        firstInput.focus();
+      }
+    }
+
+    function addActivityRow(activity) {
+      const row = document.createElement("div");
+      row.className = "activity-row";
+      row.dataset.activityId = activity.id || createActivityId();
+      row.dataset.originalSourceKey = activity.originalSourceKey || "";
+
+      const number = document.createElement("div");
+      number.className = "activity-number";
+      row.appendChild(number);
+
+      const titleGroup = document.createElement("div");
+      titleGroup.className = "field-group";
+
+      const titleLabel = document.createElement("label");
+      titleLabel.textContent = "Activity";
+      titleGroup.appendChild(titleLabel);
+
+      const titleInput = document.createElement("input");
+      titleInput.type = "text";
+      titleInput.className = "activity-title-input";
+      titleInput.placeholder = "Activity name";
+      titleInput.value = activity.title || "";
+      titleGroup.appendChild(titleInput);
+
+      row.appendChild(titleGroup);
+
+      const startGroup = document.createElement("div");
+      startGroup.className = "field-group";
+
+      const startLabel = document.createElement("label");
+      startLabel.textContent = "Start date";
+      startGroup.appendChild(startLabel);
+
+      const startInput = document.createElement("input");
+      startInput.type = "date";
+      startInput.className = "activity-start-input";
+      startInput.value = activity.start || selectedDateKey;
+      startGroup.appendChild(startInput);
+
+      row.appendChild(startGroup);
+
+      const endGroup = document.createElement("div");
+      endGroup.className = "field-group";
+
+      const endLabel = document.createElement("label");
+      endLabel.textContent = "End date";
+      endGroup.appendChild(endLabel);
+
+      const endInput = document.createElement("input");
+      endInput.type = "date";
+      endInput.className = "activity-end-input";
+      endInput.value = activity.end || selectedDateKey;
+      endGroup.appendChild(endInput);
+
+      row.appendChild(endGroup);
+
+      const removeButton = document.createElement("button");
+      removeButton.type = "button";
+      removeButton.className = "remove-activity-btn";
+      removeButton.textContent = "×";
+      removeButton.addEventListener("click", function () {
+        row.remove();
+        renumberActivityRows();
+
+        if (activityList.children.length === 0) {
+          addActivityRow({
+            id: createActivityId(),
+            title: "",
+            start: selectedDateKey,
+            end: selectedDateKey
+          });
+        }
+      });
+
+      row.appendChild(removeButton);
+
+      activityList.appendChild(row);
+      renumberActivityRows();
+    }
+
+    function renumberActivityRows() {
+      Array.from(activityList.children).forEach(function (row, index) {
+        const number = row.querySelector(".activity-number");
+        if (number) {
+          number.textContent = String(index + 1) + ".";
+        }
+      });
+    }
+
+    function saveActivities() {
+      if (!selectedDateKey || isBusy) {
         return;
       }
 
-      const note = notesByDate[dateKey] || "";
+      const rows = Array.from(activityList.children);
+      const newActivities = [];
 
-      dateCell.classList.toggle("has-note", note !== "");
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const titleInput = row.querySelector(".activity-title-input");
+        const startInput = row.querySelector(".activity-start-input");
+        const endInput = row.querySelector(".activity-end-input");
 
-      const oldPreview = dateCell.querySelector(".note-preview");
+        const title = titleInput.value.trim();
+        const start = startInput.value;
+        const end = endInput.value || start;
 
-      if (oldPreview) {
-        oldPreview.remove();
+        if (!title && !start && !end) {
+          continue;
+        }
+
+        if (!title) {
+          setStatus("Activity " + String(i + 1) + " needs a name.", "error");
+          return;
+        }
+
+        if (!isValidDateKey(start) || !isValidDateKey(end)) {
+          setStatus("Activity " + String(i + 1) + " needs valid dates.", "error");
+          return;
+        }
+
+        if (compareDateKeys(end, start) < 0) {
+          setStatus("Activity " + String(i + 1) + " end date cannot be before start date.", "error");
+          return;
+        }
+
+        newActivities.push({
+          id: row.dataset.activityId || createActivityId(),
+          title: title,
+          start: start,
+          end: end,
+          originalSourceKey: row.dataset.originalSourceKey || ""
+        });
       }
 
-      if (note) {
-        const preview = document.createElement("span");
-        preview.className = "note-preview";
-        preview.textContent = note;
-        dateCell.appendChild(preview);
+      const groupedBySourceKey = buildUpdatedActivityGroups(newActivities);
+
+      isBusy = true;
+      setModalBusy(true, "Saving...");
+
+      setStatus("Saving activities to Google Sheet...");
+
+      const tasks = [];
+
+      Object.keys(groupedBySourceKey).forEach(function (sourceKey) {
+        const activities = groupedBySourceKey[sourceKey];
+
+        if (activities.length > 0) {
+          tasks.push(callAppsScript("saveNote", {
+            dateKey: sourceKey,
+            note: encodeActivitiesValue(activities)
+          }));
+        } else {
+          tasks.push(callAppsScript("deleteNote", {
+            dateKey: sourceKey
+          }));
+        }
+      });
+
+      Promise.all(tasks)
+        .then(function () {
+          Object.keys(groupedBySourceKey).forEach(function (sourceKey) {
+            const activities = groupedBySourceKey[sourceKey];
+
+            if (activities.length > 0) {
+              notesByDate[sourceKey] = encodeActivitiesValue(activities);
+            } else {
+              delete notesByDate[sourceKey];
+            }
+          });
+
+          notesCacheByYear[currentYear] = Object.assign({}, notesByDate);
+
+          closeModal();
+          renderCalendar(currentYear);
+          setStatus("Activities saved.", "success");
+        })
+        .catch(function (error) {
+          isBusy = false;
+          setModalBusy(false);
+          setStatus(error.message, "error");
+        });
+    }
+
+    function buildUpdatedActivityGroups(newActivities) {
+      const affectedSourceKeys = {};
+      selectedSourceKeys.forEach(function (sourceKey) {
+        affectedSourceKeys[sourceKey] = true;
+      });
+
+      newActivities.forEach(function (activity) {
+        if (activity.originalSourceKey) {
+          affectedSourceKeys[activity.originalSourceKey] = true;
+        }
+
+        affectedSourceKeys[activity.start] = true;
+      });
+
+      const grouped = {};
+
+      Object.keys(affectedSourceKeys).forEach(function (sourceKey) {
+        const parsed = parseStoredValue(notesByDate[sourceKey]);
+
+        if (parsed.type === "activities") {
+          grouped[sourceKey] = parsed.activities.filter(function (activity) {
+            return !dateKeyInRange(selectedDateKey, activity.start, activity.end);
+          });
+        } else {
+          grouped[sourceKey] = [];
+        }
+      });
+
+      newActivities.forEach(function (activity) {
+        const sourceKey = activity.start;
+
+        if (!grouped[sourceKey]) {
+          grouped[sourceKey] = [];
+        }
+
+        grouped[sourceKey].push({
+          id: activity.id || createActivityId(),
+          title: activity.title,
+          start: activity.start,
+          end: activity.end
+        });
+      });
+
+      return grouped;
+    }
+
+    function deleteSelectedActivities() {
+      if (!selectedDateKey || isBusy) {
+        return;
       }
+
+      const grouped = {};
+
+      selectedSourceKeys.forEach(function (sourceKey) {
+        const parsed = parseStoredValue(notesByDate[sourceKey]);
+
+        if (parsed.type !== "activities") {
+          grouped[sourceKey] = [];
+          return;
+        }
+
+        grouped[sourceKey] = parsed.activities.filter(function (activity) {
+          return !dateKeyInRange(selectedDateKey, activity.start, activity.end);
+        });
+      });
+
+      isBusy = true;
+      setModalBusy(true, "Deleting...");
+
+      setStatus("Deleting selected activities...");
+
+      const tasks = [];
+
+      Object.keys(grouped).forEach(function (sourceKey) {
+        if (grouped[sourceKey].length > 0) {
+          tasks.push(callAppsScript("saveNote", {
+            dateKey: sourceKey,
+            note: encodeActivitiesValue(grouped[sourceKey])
+          }));
+        } else {
+          tasks.push(callAppsScript("deleteNote", {
+            dateKey: sourceKey
+          }));
+        }
+      });
+
+      Promise.all(tasks)
+        .then(function () {
+          Object.keys(grouped).forEach(function (sourceKey) {
+            if (grouped[sourceKey].length > 0) {
+              notesByDate[sourceKey] = encodeActivitiesValue(grouped[sourceKey]);
+            } else {
+              delete notesByDate[sourceKey];
+            }
+          });
+
+          notesCacheByYear[currentYear] = Object.assign({}, notesByDate);
+
+          closeModal();
+          renderCalendar(currentYear);
+          setStatus("Selected activities deleted.", "success");
+        })
+        .catch(function (error) {
+          isBusy = false;
+          setModalBusy(false);
+          setStatus(error.message, "error");
+        });
+    }
+
+    function getSourceKeysTouchingDate(dateKey) {
+      const sourceKeys = {};
+      const activities = activitiesByDate[dateKey] || [];
+
+      activities.forEach(function (activity) {
+        sourceKeys[activity.sourceKey] = true;
+      });
+
+      return Object.keys(sourceKeys);
+    }
+
+    function closeModal() {
+      modalBg.style.display = "none";
+      selectedDateKey = "";
+      selectedSourceKeys = [];
+      activityList.innerHTML = "";
+      isBusy = false;
+      setModalBusy(false);
+    }
+
+    function setModalBusy(busy, saveText) {
+      saveButton.disabled = busy;
+      deleteButton.disabled = busy;
+      cancelButton.disabled = busy;
+      addActivityButton.disabled = busy;
+
+      Array.from(activityList.querySelectorAll("input, button")).forEach(function (element) {
+        element.disabled = busy;
+      });
+
+      saveButton.textContent = saveText || "Save All";
+      deleteButton.textContent = busy ? "Deleting..." : "Delete All";
+    }
+
+    function encodeActivitiesValue(activities) {
+      return ACTIVITIES_PREFIX + JSON.stringify({
+        version: 2,
+        activities: activities
+      });
+    }
+
+    function parseStoredValue(value) {
+      if (!value) {
+        return {
+          type: "empty",
+          activities: []
+        };
+      }
+
+      if (typeof value === "string" && value.indexOf(ACTIVITIES_PREFIX) === 0) {
+        try {
+          const data = JSON.parse(value.slice(ACTIVITIES_PREFIX.length));
+
+          if (data && Array.isArray(data.activities)) {
+            return {
+              type: "activities",
+              activities: data.activities.map(function (activity) {
+                return {
+                  id: activity.id || createActivityId(),
+                  title: String(activity.title || ""),
+                  start: activity.start || "",
+                  end: activity.end || activity.start || ""
+                };
+              })
+            };
+          }
+        } catch (error) {
+          return {
+            type: "activities",
+            activities: []
+          };
+        }
+      }
+
+      if (typeof value === "string" && value.indexOf(OLD_RANGE_PREFIX) === 0) {
+        try {
+          const oldData = JSON.parse(value.slice(OLD_RANGE_PREFIX.length));
+
+          return {
+            type: "activities",
+            activities: [
+              {
+                id: oldData.id || createActivityId(),
+                title: oldData.title || "",
+                start: oldData.start || "",
+                end: oldData.end || oldData.start || ""
+              }
+            ]
+          };
+        } catch (error) {
+          return {
+            type: "activities",
+            activities: []
+          };
+        }
+      }
+
+      return {
+        type: "activities",
+        activities: [
+          {
+            id: createActivityId(),
+            title: String(value),
+            start: "",
+            end: ""
+          }
+        ]
+      };
     }
 
     function createDateKey(year, month, day) {
@@ -587,110 +1259,56 @@
       return String(year) + "-" + monthNumber + "-" + dayNumber;
     }
 
-    function openModal(year, month, day) {
-      selectedDateKey = createDateKey(year, month, day);
-      modalDate.textContent = day + " " + monthNames[month] + " " + year;
-      noteInput.value = notesByDate[selectedDateKey] || "";
-      modalBg.style.display = "flex";
-      noteInput.focus();
+    function dateToDateKey(date) {
+      return createDateKey(date.getFullYear(), date.getMonth(), date.getDate());
     }
 
-    function closeModal() {
-      modalBg.style.display = "none";
-      selectedDateKey = "";
-      noteInput.value = "";
-      isBusy = false;
-
-      saveButton.disabled = false;
-      deleteButton.disabled = false;
-      cancelButton.disabled = false;
-
-      saveButton.textContent = "Save";
-      deleteButton.textContent = "Delete";
+    function dateKeyToDate(dateKey) {
+      const parts = dateKey.split("-");
+      return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
     }
 
-    function saveNote() {
-      if (!selectedDateKey || isBusy) {
-        return;
+    function isValidDateKey(dateKey) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+        return false;
       }
 
-      const dateKeyToSave = selectedDateKey;
-      const note = noteInput.value.trim();
-
-      isBusy = true;
-      saveButton.disabled = true;
-      deleteButton.disabled = true;
-      cancelButton.disabled = true;
-      saveButton.textContent = "Saving...";
-
-      setStatus("Saving to Google Sheet...");
-
-      callAppsScript("saveNote", {
-        dateKey: dateKeyToSave,
-        note: note
-      })
-        .then(function () {
-          if (note) {
-            notesByDate[dateKeyToSave] = note;
-          } else {
-            delete notesByDate[dateKeyToSave];
-          }
-
-          notesCacheByYear[currentYear] = Object.assign({}, notesByDate);
-
-          closeModal();
-          updateOneDateCell(dateKeyToSave);
-
-          setStatus("Saved. Calendar updated without full reload.", "success");
-        })
-        .catch(function (error) {
-          isBusy = false;
-          saveButton.disabled = false;
-          deleteButton.disabled = false;
-          cancelButton.disabled = false;
-          saveButton.textContent = "Save";
-
-          setStatus(error.message, "error");
-        });
+      const date = dateKeyToDate(dateKey);
+      return dateToDateKey(date) === dateKey;
     }
 
-    function deleteNote() {
-      if (!selectedDateKey || isBusy) {
-        return;
+    function compareDateKeys(firstDateKey, secondDateKey) {
+      if (firstDateKey < secondDateKey) {
+        return -1;
       }
 
-      const dateKeyToDelete = selectedDateKey;
+      if (firstDateKey > secondDateKey) {
+        return 1;
+      }
 
-      isBusy = true;
-      saveButton.disabled = true;
-      deleteButton.disabled = true;
-      cancelButton.disabled = true;
-      deleteButton.textContent = "Deleting...";
+      return 0;
+    }
 
-      setStatus("Deleting from Google Sheet...");
+    function dateKeyInRange(dateKey, startKey, endKey) {
+      return compareDateKeys(dateKey, startKey) >= 0 && compareDateKeys(dateKey, endKey) <= 0;
+    }
 
-      callAppsScript("deleteNote", {
-        dateKey: dateKeyToDelete
-      })
-        .then(function () {
-          delete notesByDate[dateKeyToDelete];
+    function getDateKeysInRange(startKey, endKey) {
+      const keys = [];
+      const startDate = dateKeyToDate(startKey);
+      const endDate = dateKeyToDate(endKey);
+      const cursor = new Date(startDate.getTime());
 
-          notesCacheByYear[currentYear] = Object.assign({}, notesByDate);
+      while (cursor.getTime() <= endDate.getTime()) {
+        keys.push(dateToDateKey(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+      }
 
-          closeModal();
-          updateOneDateCell(dateKeyToDelete);
+      return keys;
+    }
 
-          setStatus("Deleted. Calendar updated without full reload.", "success");
-        })
-        .catch(function (error) {
-          isBusy = false;
-          saveButton.disabled = false;
-          deleteButton.disabled = false;
-          cancelButton.disabled = false;
-          deleteButton.textContent = "Delete";
-
-          setStatus(error.message, "error");
-        });
+    function createActivityId() {
+      return "activity_" + Date.now() + "_" + Math.random().toString(36).slice(2);
     }
 
     function changeYear(amount) {
