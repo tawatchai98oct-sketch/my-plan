@@ -3,12 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
   <title>Full Year Schedule Planner</title>
 
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -50,34 +49,24 @@
       cursor: pointer;
     }
 
-    .controls button:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
     .controls input {
       width: 100px;
       text-align: center;
     }
 
     .status {
-      margin-top: 12px;
+      margin: 12px auto 0;
+      max-width: 900px;
       min-height: 20px;
       font-size: 13px;
       color: #e5e7eb;
+      line-height: 1.4;
     }
 
-    .status.success {
-      color: #bbf7d0;
-    }
+    .status.success { color: #bbf7d0; }
+    .status.error { color: #fecaca; }
 
-    .status.error {
-      color: #fecaca;
-    }
-
-    main {
-      padding: 20px;
-    }
+    main { padding: 20px; }
 
     .year-grid {
       display: grid;
@@ -132,14 +121,8 @@
       background: #fff;
     }
 
-    .day:hover {
-      background: #f0f0f0;
-    }
-
-    .empty {
-      background: #fafafa;
-      cursor: default;
-    }
+    .day:hover { background: #f0f0f0; }
+    .empty { background: #fafafa; cursor: default; }
 
     .today {
       background: #fff3cd;
@@ -191,9 +174,7 @@
       box-shadow: 0 3px 15px rgba(0, 0, 0, 0.25);
     }
 
-    .modal h3 {
-      margin-top: 0;
-    }
+    .modal h3 { margin-top: 0; }
 
     textarea {
       width: 100%;
@@ -201,6 +182,7 @@
       resize: vertical;
       padding: 10px;
       font-size: 14px;
+      font-family: Arial, sans-serif;
     }
 
     .modal-actions {
@@ -217,67 +199,20 @@
       cursor: pointer;
     }
 
-    .modal-actions button:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    .save-btn {
-      background: #007bff;
-      color: white;
-    }
-
-    .delete-btn {
-      background: #dc3545;
-      color: white;
-    }
-
-    .close-btn {
-      background: #ddd;
-    }
+    .save-btn { background: #007bff; color: white; }
+    .delete-btn { background: #dc3545; color: white; }
+    .close-btn { background: #ddd; }
 
     @media (max-width: 1100px) {
-      .year-grid {
-        grid-template-columns: repeat(3, 1fr);
-      }
+      .year-grid { grid-template-columns: repeat(3, 1fr); }
     }
 
     @media (max-width: 800px) {
-      .year-grid {
-        grid-template-columns: repeat(2, 1fr);
-      }
+      .year-grid { grid-template-columns: repeat(2, 1fr); }
     }
 
     @media (max-width: 520px) {
-      .year-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    @media print {
-      header,
-      .modal-bg {
-        display: none;
-      }
-
-      body {
-        background: white;
-      }
-
-      main {
-        padding: 0;
-      }
-
-      .year-grid {
-        grid-template-columns: repeat(3, 1fr);
-        gap: 10px;
-      }
-
-      .month {
-        box-shadow: none;
-        border: 1px solid #ccc;
-        page-break-inside: avoid;
-      }
+      .year-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -287,12 +222,12 @@
     <h1>Full Year Schedule Planner</h1>
 
     <div class="controls">
-      <button onclick="changeYear(-1)">Previous Year</button>
+      <button type="button" id="prevYearButton">Previous Year</button>
       <input type="number" id="yearInput" />
-      <button onclick="changeYear(1)">Next Year</button>
-      <button onclick="goToCurrentYear()">This Year</button>
-      <button onclick="reloadCurrentYear()">Reload</button>
-      <button onclick="window.print()">Print</button>
+      <button type="button" id="nextYearButton">Next Year</button>
+      <button type="button" id="thisYearButton">This Year</button>
+      <button type="button" id="reloadButton">Reload</button>
+      <button type="button" id="printButton">Print</button>
     </div>
 
     <div id="status" class="status">Opening planner...</div>
@@ -309,9 +244,9 @@
       <textarea id="noteInput" placeholder="Write schedule or plan here..."></textarea>
 
       <div class="modal-actions">
-        <button class="delete-btn" id="deleteButton" onclick="deleteNote()">Delete</button>
-        <button class="close-btn" id="cancelButton" onclick="closeModal()">Cancel</button>
-        <button class="save-btn" id="saveButton" onclick="saveNote()">Save</button>
+        <button type="button" class="delete-btn" id="deleteButton">Delete</button>
+        <button type="button" class="close-btn" id="cancelButton">Cancel</button>
+        <button type="button" class="save-btn" id="saveButton">Save</button>
       </div>
     </div>
   </div>
@@ -332,6 +267,7 @@
     const modalBg = document.getElementById("modalBg");
     const modalDate = document.getElementById("modalDate");
     const noteInput = document.getElementById("noteInput");
+
     const saveButton = document.getElementById("saveButton");
     const deleteButton = document.getElementById("deleteButton");
     const cancelButton = document.getElementById("cancelButton");
@@ -339,8 +275,19 @@
     let currentYear = new Date().getFullYear();
     let selectedDateKey = "";
     let notesByDate = {};
+    let isSaving = false;
 
     yearInput.value = currentYear;
+
+    document.getElementById("prevYearButton").addEventListener("click", () => changeYear(-1));
+    document.getElementById("nextYearButton").addEventListener("click", () => changeYear(1));
+    document.getElementById("thisYearButton").addEventListener("click", goToCurrentYear);
+    document.getElementById("reloadButton").addEventListener("click", () => loadNotesForYear(currentYear));
+    document.getElementById("printButton").addEventListener("click", () => window.print());
+
+    saveButton.addEventListener("click", saveNote);
+    deleteButton.addEventListener("click", deleteNote);
+    cancelButton.addEventListener("click", closeModal);
 
     yearInput.addEventListener("change", function () {
       const nextYear = Number(yearInput.value);
@@ -355,15 +302,23 @@
       loadNotesForYear(currentYear);
     });
 
+    modalBg.addEventListener("click", function (event) {
+      if (event.target === modalBg && !isSaving) {
+        closeModal();
+      }
+    });
+
     function loadNotesForYear(year) {
+      calendar.innerHTML = '<div class="loading-message">Loading notes...</div>';
+
       if (!canUseAppsScript()) {
         notesByDate = {};
         renderCalendar(year);
+        setStatus("Open this from the deployed Apps Script Web App URL. Direct HTML cannot save to Google Sheet.", "error");
         return;
       }
 
-      calendar.innerHTML = `<div class="loading-message">Loading notes from Google Sheet...</div>`;
-      setStatus("Loading from Google Sheet...");
+      setStatus("Loading notes from Google Sheet...");
 
       google.script.run
         .withSuccessHandler(function (notes) {
@@ -393,7 +348,7 @@
         const weekdays = document.createElement("div");
         weekdays.className = "weekdays";
 
-        weekdayNames.forEach(dayName => {
+        weekdayNames.forEach(function (dayName) {
           const weekday = document.createElement("div");
           weekday.textContent = dayName;
           weekdays.appendChild(weekday);
@@ -426,13 +381,8 @@
             month === today.getMonth() &&
             day === today.getDate();
 
-          if (isToday) {
-            dateCell.classList.add("today");
-          }
-
-          if (savedNote) {
-            dateCell.classList.add("has-note");
-          }
+          if (isToday) dateCell.classList.add("today");
+          if (savedNote) dateCell.classList.add("has-note");
 
           const dateNumber = document.createElement("span");
           dateNumber.className = "date-number";
@@ -446,9 +396,9 @@
             dateCell.appendChild(preview);
           }
 
-          dateCell.onclick = function () {
+          dateCell.addEventListener("click", function () {
             openModal(year, month, day);
-          };
+          });
 
           daysGrid.appendChild(dateCell);
         }
@@ -461,13 +411,13 @@
     function createDateKey(year, month, day) {
       const monthNumber = String(month + 1).padStart(2, "0");
       const dayNumber = String(day).padStart(2, "0");
-      return `${year}-${monthNumber}-${dayNumber}`;
+      return String(year) + "-" + monthNumber + "-" + dayNumber;
     }
 
     function openModal(year, month, day) {
       selectedDateKey = createDateKey(year, month, day);
 
-      modalDate.textContent = `${day} ${monthNames[month]} ${year}`;
+      modalDate.textContent = day + " " + monthNames[month] + " " + year;
       noteInput.value = notesByDate[selectedDateKey] || "";
 
       modalBg.style.display = "flex";
@@ -478,16 +428,21 @@
       modalBg.style.display = "none";
       selectedDateKey = "";
       noteInput.value = "";
+      isSaving = false;
       setModalButtonsDisabled(false);
     }
 
     function saveNote() {
-      if (!selectedDateKey || !canUseAppsScript()) {
+      if (!selectedDateKey || isSaving) return;
+
+      if (!canUseAppsScript()) {
+        setStatus("Cannot save. Open from Apps Script Web App URL.", "error");
         return;
       }
 
       const note = noteInput.value.trim();
 
+      isSaving = true;
       setModalButtonsDisabled(true);
       setStatus("Saving to Google Sheet...");
 
@@ -504,6 +459,7 @@
           setStatus("Saved to Google Sheet.", "success");
         })
         .withFailureHandler(function (error) {
+          isSaving = false;
           setModalButtonsDisabled(false);
           setStatus(getErrorMessage(error), "error");
         })
@@ -511,10 +467,14 @@
     }
 
     function deleteNote() {
-      if (!selectedDateKey || !canUseAppsScript()) {
+      if (!selectedDateKey || isSaving) return;
+
+      if (!canUseAppsScript()) {
+        setStatus("Cannot delete. Open from Apps Script Web App URL.", "error");
         return;
       }
 
+      isSaving = true;
       setModalButtonsDisabled(true);
       setStatus("Deleting from Google Sheet...");
 
@@ -527,6 +487,7 @@
           setStatus("Deleted from Google Sheet.", "success");
         })
         .withFailureHandler(function (error) {
+          isSaving = false;
           setModalButtonsDisabled(false);
           setStatus(getErrorMessage(error), "error");
         })
@@ -542,10 +503,6 @@
     function goToCurrentYear() {
       currentYear = new Date().getFullYear();
       yearInput.value = currentYear;
-      loadNotesForYear(currentYear);
-    }
-
-    function reloadCurrentYear() {
       loadNotesForYear(currentYear);
     }
 
@@ -565,19 +522,11 @@
     }
 
     function canUseAppsScript() {
-      const isAvailable =
+      return !!(
         window.google &&
         google.script &&
-        google.script.run;
-
-      if (!isAvailable) {
-        setStatus(
-          "Open this from your deployed Apps Script Web App URL. Direct browser opening cannot write to Google Sheet.",
-          "error"
-        );
-      }
-
-      return isAvailable;
+        google.script.run
+      );
     }
 
     function getErrorMessage(error) {
@@ -585,14 +534,8 @@
         return error.message;
       }
 
-      return "Google Sheet sync failed. Check Apps Script permissions and deployment settings.";
+      return "Google Sheet sync failed. Check Apps Script permissions, Code.gs, and deployment settings.";
     }
-
-    modalBg.addEventListener("click", function (event) {
-      if (event.target === modalBg) {
-        closeModal();
-      }
-    });
 
     loadNotesForYear(currentYear);
   </script>
