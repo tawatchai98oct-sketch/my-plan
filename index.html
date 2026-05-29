@@ -50,9 +50,29 @@
       cursor: pointer;
     }
 
+    .controls button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
     .controls input {
       width: 100px;
       text-align: center;
+    }
+
+    .status {
+      margin-top: 12px;
+      min-height: 20px;
+      font-size: 13px;
+      color: #e5e7eb;
+    }
+
+    .status.success {
+      color: #bbf7d0;
+    }
+
+    .status.error {
+      color: #fecaca;
     }
 
     main {
@@ -63,6 +83,15 @@
       display: grid;
       grid-template-columns: repeat(4, 1fr);
       gap: 18px;
+    }
+
+    .loading-message {
+      grid-column: 1 / -1;
+      background: white;
+      border-radius: 10px;
+      padding: 20px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
     }
 
     .month {
@@ -188,6 +217,11 @@
       cursor: pointer;
     }
 
+    .modal-actions button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
     .save-btn {
       background: #007bff;
       color: white;
@@ -257,8 +291,11 @@
       <input type="number" id="yearInput" />
       <button onclick="changeYear(1)">Next Year</button>
       <button onclick="goToCurrentYear()">This Year</button>
+      <button onclick="reloadCurrentYear()">Reload</button>
       <button onclick="window.print()">Print</button>
     </div>
+
+    <div id="status" class="status">Opening planner...</div>
   </header>
 
   <main>
@@ -272,9 +309,9 @@
       <textarea id="noteInput" placeholder="Write schedule or plan here..."></textarea>
 
       <div class="modal-actions">
-        <button class="delete-btn" onclick="deleteNote()">Delete</button>
-        <button class="close-btn" onclick="closeModal()">Cancel</button>
-        <button class="save-btn" onclick="saveNote()">Save</button>
+        <button class="delete-btn" id="deleteButton" onclick="deleteNote()">Delete</button>
+        <button class="close-btn" id="cancelButton" onclick="closeModal()">Cancel</button>
+        <button class="save-btn" id="saveButton" onclick="saveNote()">Save</button>
       </div>
     </div>
   </div>
@@ -290,20 +327,57 @@
 
     const calendar = document.getElementById("calendar");
     const yearInput = document.getElementById("yearInput");
+    const statusBox = document.getElementById("status");
 
     const modalBg = document.getElementById("modalBg");
     const modalDate = document.getElementById("modalDate");
     const noteInput = document.getElementById("noteInput");
+    const saveButton = document.getElementById("saveButton");
+    const deleteButton = document.getElementById("deleteButton");
+    const cancelButton = document.getElementById("cancelButton");
 
     let currentYear = new Date().getFullYear();
     let selectedDateKey = "";
+    let notesByDate = {};
 
     yearInput.value = currentYear;
 
     yearInput.addEventListener("change", function () {
-      currentYear = Number(yearInput.value);
-      renderCalendar(currentYear);
+      const nextYear = Number(yearInput.value);
+
+      if (!Number.isInteger(nextYear) || nextYear < 1900 || nextYear > 9999) {
+        setStatus("Please enter a valid year.", "error");
+        yearInput.value = currentYear;
+        return;
+      }
+
+      currentYear = nextYear;
+      loadNotesForYear(currentYear);
     });
+
+    function loadNotesForYear(year) {
+      if (!canUseAppsScript()) {
+        notesByDate = {};
+        renderCalendar(year);
+        return;
+      }
+
+      calendar.innerHTML = `<div class="loading-message">Loading notes from Google Sheet...</div>`;
+      setStatus("Loading from Google Sheet...");
+
+      google.script.run
+        .withSuccessHandler(function (notes) {
+          notesByDate = notes || {};
+          renderCalendar(year);
+          setStatus("Loaded from Google Sheet.", "success");
+        })
+        .withFailureHandler(function (error) {
+          notesByDate = {};
+          renderCalendar(year);
+          setStatus(getErrorMessage(error), "error");
+        })
+        .getNotesForYear(year);
+    }
 
     function renderCalendar(year) {
       calendar.innerHTML = "";
@@ -319,9 +393,9 @@
         const weekdays = document.createElement("div");
         weekdays.className = "weekdays";
 
-        weekdayNames.forEach(day => {
+        weekdayNames.forEach(dayName => {
           const weekday = document.createElement("div");
-          weekday.textContent = day;
+          weekday.textContent = dayName;
           weekdays.appendChild(weekday);
         });
 
@@ -344,7 +418,7 @@
           dateCell.className = "day";
 
           const dateKey = createDateKey(year, month, day);
-          const savedNote = localStorage.getItem(dateKey);
+          const savedNote = notesByDate[dateKey] || "";
 
           const today = new Date();
           const isToday =
@@ -360,10 +434,17 @@
             dateCell.classList.add("has-note");
           }
 
-          dateCell.innerHTML = `
-            <span class="date-number">${day}</span>
-            ${savedNote ? `<span class="note-preview">${savedNote}</span>` : ""}
-          `;
+          const dateNumber = document.createElement("span");
+          dateNumber.className = "date-number";
+          dateNumber.textContent = String(day);
+          dateCell.appendChild(dateNumber);
+
+          if (savedNote) {
+            const preview = document.createElement("span");
+            preview.className = "note-preview";
+            preview.textContent = savedNote;
+            dateCell.appendChild(preview);
+          }
 
           dateCell.onclick = function () {
             openModal(year, month, day);
@@ -380,14 +461,14 @@
     function createDateKey(year, month, day) {
       const monthNumber = String(month + 1).padStart(2, "0");
       const dayNumber = String(day).padStart(2, "0");
-      return `schedule-${year}-${monthNumber}-${dayNumber}`;
+      return `${year}-${monthNumber}-${dayNumber}`;
     }
 
     function openModal(year, month, day) {
       selectedDateKey = createDateKey(year, month, day);
 
       modalDate.textContent = `${day} ${monthNames[month]} ${year}`;
-      noteInput.value = localStorage.getItem(selectedDateKey) || "";
+      noteInput.value = notesByDate[selectedDateKey] || "";
 
       modalBg.style.display = "flex";
       noteInput.focus();
@@ -397,37 +478,114 @@
       modalBg.style.display = "none";
       selectedDateKey = "";
       noteInput.value = "";
+      setModalButtonsDisabled(false);
     }
 
     function saveNote() {
-      const note = noteInput.value.trim();
-
-      if (note) {
-        localStorage.setItem(selectedDateKey, note);
-      } else {
-        localStorage.removeItem(selectedDateKey);
+      if (!selectedDateKey || !canUseAppsScript()) {
+        return;
       }
 
-      closeModal();
-      renderCalendar(currentYear);
+      const note = noteInput.value.trim();
+
+      setModalButtonsDisabled(true);
+      setStatus("Saving to Google Sheet...");
+
+      google.script.run
+        .withSuccessHandler(function () {
+          if (note) {
+            notesByDate[selectedDateKey] = note;
+          } else {
+            delete notesByDate[selectedDateKey];
+          }
+
+          closeModal();
+          renderCalendar(currentYear);
+          setStatus("Saved to Google Sheet.", "success");
+        })
+        .withFailureHandler(function (error) {
+          setModalButtonsDisabled(false);
+          setStatus(getErrorMessage(error), "error");
+        })
+        .saveNote(selectedDateKey, note);
     }
 
     function deleteNote() {
-      localStorage.removeItem(selectedDateKey);
-      closeModal();
-      renderCalendar(currentYear);
+      if (!selectedDateKey || !canUseAppsScript()) {
+        return;
+      }
+
+      setModalButtonsDisabled(true);
+      setStatus("Deleting from Google Sheet...");
+
+      google.script.run
+        .withSuccessHandler(function () {
+          delete notesByDate[selectedDateKey];
+
+          closeModal();
+          renderCalendar(currentYear);
+          setStatus("Deleted from Google Sheet.", "success");
+        })
+        .withFailureHandler(function (error) {
+          setModalButtonsDisabled(false);
+          setStatus(getErrorMessage(error), "error");
+        })
+        .deleteNote(selectedDateKey);
     }
 
     function changeYear(amount) {
       currentYear += amount;
       yearInput.value = currentYear;
-      renderCalendar(currentYear);
+      loadNotesForYear(currentYear);
     }
 
     function goToCurrentYear() {
       currentYear = new Date().getFullYear();
       yearInput.value = currentYear;
-      renderCalendar(currentYear);
+      loadNotesForYear(currentYear);
+    }
+
+    function reloadCurrentYear() {
+      loadNotesForYear(currentYear);
+    }
+
+    function setStatus(message, type) {
+      statusBox.textContent = message || "";
+      statusBox.className = "status";
+
+      if (type) {
+        statusBox.classList.add(type);
+      }
+    }
+
+    function setModalButtonsDisabled(disabled) {
+      saveButton.disabled = disabled;
+      deleteButton.disabled = disabled;
+      cancelButton.disabled = disabled;
+    }
+
+    function canUseAppsScript() {
+      const isAvailable =
+        window.google &&
+        google.script &&
+        google.script.run;
+
+      if (!isAvailable) {
+        setStatus(
+          "Open this from your deployed Apps Script Web App URL. Direct browser opening cannot write to Google Sheet.",
+          "error"
+        );
+      }
+
+      return isAvailable;
+    }
+
+    function getErrorMessage(error) {
+      if (error && error.message) {
+        return error.message;
+      }
+
+      return "Google Sheet sync failed. Check Apps Script permissions and deployment settings.";
     }
 
     modalBg.addEventListener("click", function (event) {
@@ -436,7 +594,7 @@
       }
     });
 
-    renderCalendar(currentYear);
+    loadNotesForYear(currentYear);
   </script>
 </body>
 </html>
