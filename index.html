@@ -79,8 +79,8 @@
 
     .year-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 18px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 22px;
     }
 
     .loading-message {
@@ -120,7 +120,7 @@
     }
 
     .day {
-      min-height: 45px;
+      min-height: 48px;
       padding: 5px;
       border: 1px solid #eee;
       font-size: 13px;
@@ -139,9 +139,23 @@
       cursor: default;
     }
 
+    .past-date {
+      background: #e5e5e5;
+      color: #777;
+    }
+
+    .past-date:hover {
+      background: #dcdcdc;
+    }
+
+    .past-date .note-preview {
+      color: #666;
+    }
+
     .today {
       background: #fff3cd;
       border: 2px solid #d39e00;
+      color: #222;
     }
 
     .date-number {
@@ -316,12 +330,6 @@
   </div>
 
   <script>
-    /************************************************************
-     * IMPORTANT
-     * This is for GitHub Pages.
-     * Keep this file name as index.html in GitHub.
-     ************************************************************/
-
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwHUmxDQ6GaMJWKRTrxcin5g-UrrwKIOodInRKKnoCpbINW6_gCq0eSDSxQO7R8eizIyg/exec";
 
     const monthNames = [
@@ -347,6 +355,8 @@
     let currentYear = new Date().getFullYear();
     let selectedDateKey = "";
     let notesByDate = {};
+    let notesCacheByYear = {};
+    let dateCellByKey = {};
     let isBusy = false;
 
     yearInput.value = currentYear;
@@ -364,7 +374,7 @@
     });
 
     document.getElementById("reloadButton").addEventListener("click", function () {
-      loadNotesForYear(currentYear);
+      loadNotesForYear(currentYear, true);
     });
 
     document.getElementById("printButton").addEventListener("click", function () {
@@ -393,7 +403,7 @@
       }
 
       currentYear = nextYear;
-      loadNotesForYear(currentYear);
+      loadNotesForYear(currentYear, false);
     });
 
     modalBg.addEventListener("click", function (event) {
@@ -402,25 +412,55 @@
       }
     });
 
-    function loadNotesForYear(year) {
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && modalBg.style.display === "flex" && !isBusy) {
+        closeModal();
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+        if (modalBg.style.display === "flex") {
+          event.preventDefault();
+          saveNote();
+        }
+      }
+    });
+
+    function loadNotesForYear(year, forceReload) {
+      if (!forceReload && notesCacheByYear[year]) {
+        notesByDate = Object.assign({}, notesCacheByYear[year]);
+        renderCalendar(year);
+        setStatus("Loaded from memory. Fast mode.", "success");
+        return Promise.resolve(notesByDate);
+      }
+
       calendar.innerHTML = '<div class="loading-message">Loading notes...</div>';
       setStatus("Loading notes from Google Sheet...");
 
-      callAppsScript("getNotesForYear", { year: year })
+      return callAppsScript("getNotesForYear", { year: year })
         .then(function (response) {
           notesByDate = response.data || {};
+          notesCacheByYear[year] = Object.assign({}, notesByDate);
+
           renderCalendar(year);
-          setStatus("Loaded from Google Sheet.", "success");
+
+          const count = Object.keys(notesByDate).length;
+          setStatus("Loaded from Google Sheet. Notes found: " + count, "success");
+
+          return notesByDate;
         })
         .catch(function (error) {
           notesByDate = {};
           renderCalendar(year);
           setStatus(error.message, "error");
+          return null;
         });
     }
 
     function renderCalendar(year) {
       calendar.innerHTML = "";
+      dateCellByKey = {};
+
+      const fragment = document.createDocumentFragment();
 
       for (let month = 0; month < 12; month++) {
         const monthBox = document.createElement("div");
@@ -460,11 +500,21 @@
           const dateKey = createDateKey(year, month, day);
           const savedNote = notesByDate[dateKey] || "";
 
+          dateCell.dataset.dateKey = dateKey;
+          dateCellByKey[dateKey] = dateCell;
+
           const today = new Date();
-          const isToday =
-            year === today.getFullYear() &&
-            month === today.getMonth() &&
-            day === today.getDate();
+          today.setHours(0, 0, 0, 0);
+
+          const cellDate = new Date(year, month, day);
+          cellDate.setHours(0, 0, 0, 0);
+
+          const isToday = cellDate.getTime() === today.getTime();
+          const isPastDate = cellDate.getTime() < today.getTime();
+
+          if (isPastDate) {
+            dateCell.classList.add("past-date");
+          }
 
           if (isToday) {
             dateCell.classList.add("today");
@@ -494,7 +544,35 @@
         }
 
         monthBox.appendChild(daysGrid);
-        calendar.appendChild(monthBox);
+        fragment.appendChild(monthBox);
+      }
+
+      calendar.appendChild(fragment);
+    }
+
+    function updateOneDateCell(dateKey) {
+      const dateCell = dateCellByKey[dateKey];
+
+      if (!dateCell) {
+        renderCalendar(currentYear);
+        return;
+      }
+
+      const note = notesByDate[dateKey] || "";
+
+      dateCell.classList.toggle("has-note", note !== "");
+
+      const oldPreview = dateCell.querySelector(".note-preview");
+
+      if (oldPreview) {
+        oldPreview.remove();
+      }
+
+      if (note) {
+        const preview = document.createElement("span");
+        preview.className = "note-preview";
+        preview.textContent = note;
+        dateCell.appendChild(preview);
       }
     }
 
@@ -517,9 +595,11 @@
       selectedDateKey = "";
       noteInput.value = "";
       isBusy = false;
+
       saveButton.disabled = false;
       deleteButton.disabled = false;
       cancelButton.disabled = false;
+
       saveButton.textContent = "Save";
       deleteButton.textContent = "Delete";
     }
@@ -529,6 +609,7 @@
         return;
       }
 
+      const dateKeyToSave = selectedDateKey;
       const note = noteInput.value.trim();
 
       isBusy = true;
@@ -536,22 +617,26 @@
       deleteButton.disabled = true;
       cancelButton.disabled = true;
       saveButton.textContent = "Saving...";
+
       setStatus("Saving to Google Sheet...");
 
       callAppsScript("saveNote", {
-        dateKey: selectedDateKey,
+        dateKey: dateKeyToSave,
         note: note
       })
         .then(function () {
           if (note) {
-            notesByDate[selectedDateKey] = note;
+            notesByDate[dateKeyToSave] = note;
           } else {
-            delete notesByDate[selectedDateKey];
+            delete notesByDate[dateKeyToSave];
           }
 
+          notesCacheByYear[currentYear] = Object.assign({}, notesByDate);
+
           closeModal();
-          renderCalendar(currentYear);
-          setStatus("Saved to Google Sheet.", "success");
+          updateOneDateCell(dateKeyToSave);
+
+          setStatus("Saved. Calendar updated without full reload.", "success");
         })
         .catch(function (error) {
           isBusy = false;
@@ -559,6 +644,7 @@
           deleteButton.disabled = false;
           cancelButton.disabled = false;
           saveButton.textContent = "Save";
+
           setStatus(error.message, "error");
         });
     }
@@ -568,22 +654,28 @@
         return;
       }
 
+      const dateKeyToDelete = selectedDateKey;
+
       isBusy = true;
       saveButton.disabled = true;
       deleteButton.disabled = true;
       cancelButton.disabled = true;
       deleteButton.textContent = "Deleting...";
+
       setStatus("Deleting from Google Sheet...");
 
       callAppsScript("deleteNote", {
-        dateKey: selectedDateKey
+        dateKey: dateKeyToDelete
       })
         .then(function () {
-          delete notesByDate[selectedDateKey];
+          delete notesByDate[dateKeyToDelete];
+
+          notesCacheByYear[currentYear] = Object.assign({}, notesByDate);
 
           closeModal();
-          renderCalendar(currentYear);
-          setStatus("Deleted from Google Sheet.", "success");
+          updateOneDateCell(dateKeyToDelete);
+
+          setStatus("Deleted. Calendar updated without full reload.", "success");
         })
         .catch(function (error) {
           isBusy = false;
@@ -591,6 +683,7 @@
           deleteButton.disabled = false;
           cancelButton.disabled = false;
           deleteButton.textContent = "Delete";
+
           setStatus(error.message, "error");
         });
     }
@@ -598,13 +691,13 @@
     function changeYear(amount) {
       currentYear += amount;
       yearInput.value = currentYear;
-      loadNotesForYear(currentYear);
+      loadNotesForYear(currentYear, false);
     }
 
     function goToCurrentYear() {
       currentYear = new Date().getFullYear();
       yearInput.value = currentYear;
-      loadNotesForYear(currentYear);
+      loadNotesForYear(currentYear, false);
     }
 
     function setStatus(message, type) {
@@ -624,35 +717,47 @@
           "_" +
           Math.random().toString(36).slice(2);
 
+        const url = new URL(APPS_SCRIPT_URL);
+        url.searchParams.set("action", action);
+        url.searchParams.set("callback", callbackName);
+        url.searchParams.set("_cacheBust", String(Date.now()));
+
+        Object.keys(params || {}).forEach(function (key) {
+          url.searchParams.set(key, params[key]);
+        });
+
         const timeout = window.setTimeout(function () {
           cleanup();
-          reject(new Error("Apps Script did not respond. Check Web App access: Execute as Me, Who has access Anyone, then deploy a new version."));
+
+          reject(new Error(
+            "Apps Script did not respond within 20 seconds. Please check deployment URL, access permission, or backend error."
+          ));
         }, 20000);
 
         window[callbackName] = function (payload) {
           cleanup();
 
           if (!payload || payload.ok !== true) {
-            reject(new Error(payload && payload.error ? payload.error : "Apps Script returned an error."));
+            const message =
+              payload && payload.error
+                ? payload.error
+                : "Apps Script returned an error.";
+            reject(new Error(message));
             return;
           }
 
           resolve(payload);
         };
 
-        const url = new URL(APPS_SCRIPT_URL);
-        url.searchParams.set("action", action);
-        url.searchParams.set("callback", callbackName);
-
-        Object.keys(params || {}).forEach(function (key) {
-          url.searchParams.set(key, params[key]);
-        });
-
         const script = document.createElement("script");
         script.src = url.toString();
+
         script.onerror = function () {
           cleanup();
-          reject(new Error("Cannot connect to Apps Script. Check that the /exec URL is public and deployed as a new version."));
+
+          reject(new Error(
+            "Browser could not load Apps Script. Please check your /exec URL and deployment permission."
+          ));
         };
 
         document.body.appendChild(script);
@@ -668,7 +773,7 @@
       });
     }
 
-    loadNotesForYear(currentYear);
+    loadNotesForYear(currentYear, false);
   </script>
 </body>
 </html>
