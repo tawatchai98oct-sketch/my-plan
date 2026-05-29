@@ -216,6 +216,11 @@
       cursor: pointer;
     }
 
+    .modal-actions button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
     .save-btn {
       background: #007bff;
       color: white;
@@ -311,6 +316,14 @@
   </div>
 
   <script>
+    /************************************************************
+     * IMPORTANT
+     * This is for GitHub Pages.
+     * Keep this file name as index.html in GitHub.
+     ************************************************************/
+
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwHUmxDQ6GaMJWKRTrxcin5g-UrrwKIOodInRKKnoCpbINW6_gCq0eSDSxQO7R8eizIyg/exec";
+
     const monthNames = [
       "January", "February", "March", "April",
       "May", "June", "July", "August",
@@ -334,6 +347,7 @@
     let currentYear = new Date().getFullYear();
     let selectedDateKey = "";
     let notesByDate = {};
+    let isBusy = false;
 
     yearInput.value = currentYear;
 
@@ -383,38 +397,26 @@
     });
 
     modalBg.addEventListener("click", function (event) {
-      if (event.target === modalBg) {
+      if (event.target === modalBg && !isBusy) {
         closeModal();
       }
     });
 
     function loadNotesForYear(year) {
       calendar.innerHTML = '<div class="loading-message">Loading notes...</div>';
-
-      if (!canUseAppsScript()) {
-        notesByDate = {};
-        renderCalendar(year);
-        setStatus(
-          "This page is not running inside Apps Script Web App. Open the /exec URL. Direct HTML cannot save to Google Sheets.",
-          "error"
-        );
-        return;
-      }
-
       setStatus("Loading notes from Google Sheet...");
 
-      google.script.run
-        .withSuccessHandler(function (notes) {
-          notesByDate = notes || {};
+      callAppsScript("getNotesForYear", { year: year })
+        .then(function (response) {
+          notesByDate = response.data || {};
           renderCalendar(year);
           setStatus("Loaded from Google Sheet.", "success");
         })
-        .withFailureHandler(function (error) {
+        .catch(function (error) {
           notesByDate = {};
           renderCalendar(year);
-          setStatus(getErrorMessage(error), "error");
-        })
-        .getNotesForYear(year);
+          setStatus(error.message, "error");
+        });
     }
 
     function renderCalendar(year) {
@@ -514,28 +516,33 @@
       modalBg.style.display = "none";
       selectedDateKey = "";
       noteInput.value = "";
+      isBusy = false;
+      saveButton.disabled = false;
+      deleteButton.disabled = false;
+      cancelButton.disabled = false;
       saveButton.textContent = "Save";
       deleteButton.textContent = "Delete";
     }
 
     function saveNote() {
-      if (!selectedDateKey) {
-        setStatus("Please click a date first.", "error");
-        return;
-      }
-
-      if (!canUseAppsScript()) {
-        setStatus("Cannot save. Open the deployed Apps Script /exec URL.", "error");
+      if (!selectedDateKey || isBusy) {
         return;
       }
 
       const note = noteInput.value.trim();
 
+      isBusy = true;
+      saveButton.disabled = true;
+      deleteButton.disabled = true;
+      cancelButton.disabled = true;
       saveButton.textContent = "Saving...";
       setStatus("Saving to Google Sheet...");
 
-      google.script.run
-        .withSuccessHandler(function () {
+      callAppsScript("saveNote", {
+        dateKey: selectedDateKey,
+        note: note
+      })
+        .then(function () {
           if (note) {
             notesByDate[selectedDateKey] = note;
           } else {
@@ -546,39 +553,46 @@
           renderCalendar(currentYear);
           setStatus("Saved to Google Sheet.", "success");
         })
-        .withFailureHandler(function (error) {
+        .catch(function (error) {
+          isBusy = false;
+          saveButton.disabled = false;
+          deleteButton.disabled = false;
+          cancelButton.disabled = false;
           saveButton.textContent = "Save";
-          setStatus(getErrorMessage(error), "error");
-        })
-        .saveNote(selectedDateKey, note);
+          setStatus(error.message, "error");
+        });
     }
 
     function deleteNote() {
-      if (!selectedDateKey) {
-        setStatus("Please click a date first.", "error");
+      if (!selectedDateKey || isBusy) {
         return;
       }
 
-      if (!canUseAppsScript()) {
-        setStatus("Cannot delete. Open the deployed Apps Script /exec URL.", "error");
-        return;
-      }
-
+      isBusy = true;
+      saveButton.disabled = true;
+      deleteButton.disabled = true;
+      cancelButton.disabled = true;
       deleteButton.textContent = "Deleting...";
       setStatus("Deleting from Google Sheet...");
 
-      google.script.run
-        .withSuccessHandler(function () {
+      callAppsScript("deleteNote", {
+        dateKey: selectedDateKey
+      })
+        .then(function () {
           delete notesByDate[selectedDateKey];
+
           closeModal();
           renderCalendar(currentYear);
           setStatus("Deleted from Google Sheet.", "success");
         })
-        .withFailureHandler(function (error) {
+        .catch(function (error) {
+          isBusy = false;
+          saveButton.disabled = false;
+          deleteButton.disabled = false;
+          cancelButton.disabled = false;
           deleteButton.textContent = "Delete";
-          setStatus(getErrorMessage(error), "error");
-        })
-        .deleteNote(selectedDateKey);
+          setStatus(error.message, "error");
+        });
     }
 
     function changeYear(amount) {
@@ -602,16 +616,56 @@
       }
     }
 
-    function canUseAppsScript() {
-      return !!(window.google && google.script && google.script.run);
-    }
+    function callAppsScript(action, params) {
+      return new Promise(function (resolve, reject) {
+        const callbackName =
+          "jsonpCallback_" +
+          Date.now() +
+          "_" +
+          Math.random().toString(36).slice(2);
 
-    function getErrorMessage(error) {
-      if (error && error.message) {
-        return error.message;
-      }
+        const timeout = window.setTimeout(function () {
+          cleanup();
+          reject(new Error("Apps Script did not respond. Check Web App access: Execute as Me, Who has access Anyone, then deploy a new version."));
+        }, 20000);
 
-      return "Google Sheet sync failed. Check deployment, permissions, and spreadsheet connection.";
+        window[callbackName] = function (payload) {
+          cleanup();
+
+          if (!payload || payload.ok !== true) {
+            reject(new Error(payload && payload.error ? payload.error : "Apps Script returned an error."));
+            return;
+          }
+
+          resolve(payload);
+        };
+
+        const url = new URL(APPS_SCRIPT_URL);
+        url.searchParams.set("action", action);
+        url.searchParams.set("callback", callbackName);
+
+        Object.keys(params || {}).forEach(function (key) {
+          url.searchParams.set(key, params[key]);
+        });
+
+        const script = document.createElement("script");
+        script.src = url.toString();
+        script.onerror = function () {
+          cleanup();
+          reject(new Error("Cannot connect to Apps Script. Check that the /exec URL is public and deployed as a new version."));
+        };
+
+        document.body.appendChild(script);
+
+        function cleanup() {
+          window.clearTimeout(timeout);
+          delete window[callbackName];
+
+          if (script.parentNode) {
+            script.parentNode.removeChild(script);
+          }
+        }
+      });
     }
 
     loadNotesForYear(currentYear);
