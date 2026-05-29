@@ -7,7 +7,9 @@
   <title>Full Year Schedule Planner</title>
 
   <style>
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+    }
 
     body {
       margin: 0;
@@ -59,14 +61,21 @@
       max-width: 900px;
       min-height: 20px;
       font-size: 13px;
-      color: #e5e7eb;
       line-height: 1.4;
+      color: #e5e7eb;
     }
 
-    .status.success { color: #bbf7d0; }
-    .status.error { color: #fecaca; }
+    .status.success {
+      color: #bbf7d0;
+    }
 
-    main { padding: 20px; }
+    .status.error {
+      color: #fecaca;
+    }
+
+    main {
+      padding: 20px;
+    }
 
     .year-grid {
       display: grid;
@@ -121,8 +130,14 @@
       background: #fff;
     }
 
-    .day:hover { background: #f0f0f0; }
-    .empty { background: #fafafa; cursor: default; }
+    .day:hover {
+      background: #f0f0f0;
+    }
+
+    .empty {
+      background: #fafafa;
+      cursor: default;
+    }
 
     .today {
       background: #fff3cd;
@@ -174,7 +189,9 @@
       box-shadow: 0 3px 15px rgba(0, 0, 0, 0.25);
     }
 
-    .modal h3 { margin-top: 0; }
+    .modal h3 {
+      margin-top: 0;
+    }
 
     textarea {
       width: 100%;
@@ -199,20 +216,62 @@
       cursor: pointer;
     }
 
-    .save-btn { background: #007bff; color: white; }
-    .delete-btn { background: #dc3545; color: white; }
-    .close-btn { background: #ddd; }
+    .save-btn {
+      background: #007bff;
+      color: white;
+    }
+
+    .delete-btn {
+      background: #dc3545;
+      color: white;
+    }
+
+    .close-btn {
+      background: #ddd;
+    }
 
     @media (max-width: 1100px) {
-      .year-grid { grid-template-columns: repeat(3, 1fr); }
+      .year-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
     }
 
     @media (max-width: 800px) {
-      .year-grid { grid-template-columns: repeat(2, 1fr); }
+      .year-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
     }
 
     @media (max-width: 520px) {
-      .year-grid { grid-template-columns: 1fr; }
+      .year-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media print {
+      header,
+      .modal-bg {
+        display: none;
+      }
+
+      body {
+        background: white;
+      }
+
+      main {
+        padding: 0;
+      }
+
+      .year-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+      }
+
+      .month {
+        box-shadow: none;
+        border: 1px solid #ccc;
+        page-break-inside: avoid;
+      }
     }
   </style>
 </head>
@@ -275,19 +334,40 @@
     let currentYear = new Date().getFullYear();
     let selectedDateKey = "";
     let notesByDate = {};
-    let isSaving = false;
 
     yearInput.value = currentYear;
 
-    document.getElementById("prevYearButton").addEventListener("click", () => changeYear(-1));
-    document.getElementById("nextYearButton").addEventListener("click", () => changeYear(1));
-    document.getElementById("thisYearButton").addEventListener("click", goToCurrentYear);
-    document.getElementById("reloadButton").addEventListener("click", () => loadNotesForYear(currentYear));
-    document.getElementById("printButton").addEventListener("click", () => window.print());
+    document.getElementById("prevYearButton").addEventListener("click", function () {
+      changeYear(-1);
+    });
 
-    saveButton.addEventListener("click", saveNote);
-    deleteButton.addEventListener("click", deleteNote);
-    cancelButton.addEventListener("click", closeModal);
+    document.getElementById("nextYearButton").addEventListener("click", function () {
+      changeYear(1);
+    });
+
+    document.getElementById("thisYearButton").addEventListener("click", function () {
+      goToCurrentYear();
+    });
+
+    document.getElementById("reloadButton").addEventListener("click", function () {
+      loadNotesForYear(currentYear);
+    });
+
+    document.getElementById("printButton").addEventListener("click", function () {
+      window.print();
+    });
+
+    saveButton.addEventListener("click", function () {
+      saveNote();
+    });
+
+    deleteButton.addEventListener("click", function () {
+      deleteNote();
+    });
+
+    cancelButton.addEventListener("click", function () {
+      closeModal();
+    });
 
     yearInput.addEventListener("change", function () {
       const nextYear = Number(yearInput.value);
@@ -303,7 +383,7 @@
     });
 
     modalBg.addEventListener("click", function (event) {
-      if (event.target === modalBg && !isSaving) {
+      if (event.target === modalBg) {
         closeModal();
       }
     });
@@ -314,7 +394,10 @@
       if (!canUseAppsScript()) {
         notesByDate = {};
         renderCalendar(year);
-        setStatus("Open this from the deployed Apps Script Web App URL. Direct HTML cannot save to Google Sheet.", "error");
+        setStatus(
+          "This page is not running inside Apps Script Web App. Open the /exec URL. Direct HTML cannot save to Google Sheets.",
+          "error"
+        );
         return;
       }
 
@@ -381,8 +464,13 @@
             month === today.getMonth() &&
             day === today.getDate();
 
-          if (isToday) dateCell.classList.add("today");
-          if (savedNote) dateCell.classList.add("has-note");
+          if (isToday) {
+            dateCell.classList.add("today");
+          }
+
+          if (savedNote) {
+            dateCell.classList.add("has-note");
+          }
 
           const dateNumber = document.createElement("span");
           dateNumber.className = "date-number";
@@ -416,10 +504,8 @@
 
     function openModal(year, month, day) {
       selectedDateKey = createDateKey(year, month, day);
-
       modalDate.textContent = day + " " + monthNames[month] + " " + year;
       noteInput.value = notesByDate[selectedDateKey] || "";
-
       modalBg.style.display = "flex";
       noteInput.focus();
     }
@@ -428,22 +514,24 @@
       modalBg.style.display = "none";
       selectedDateKey = "";
       noteInput.value = "";
-      isSaving = false;
-      setModalButtonsDisabled(false);
+      saveButton.textContent = "Save";
+      deleteButton.textContent = "Delete";
     }
 
     function saveNote() {
-      if (!selectedDateKey || isSaving) return;
+      if (!selectedDateKey) {
+        setStatus("Please click a date first.", "error");
+        return;
+      }
 
       if (!canUseAppsScript()) {
-        setStatus("Cannot save. Open from Apps Script Web App URL.", "error");
+        setStatus("Cannot save. Open the deployed Apps Script /exec URL.", "error");
         return;
       }
 
       const note = noteInput.value.trim();
 
-      isSaving = true;
-      setModalButtonsDisabled(true);
+      saveButton.textContent = "Saving...";
       setStatus("Saving to Google Sheet...");
 
       google.script.run
@@ -459,36 +547,35 @@
           setStatus("Saved to Google Sheet.", "success");
         })
         .withFailureHandler(function (error) {
-          isSaving = false;
-          setModalButtonsDisabled(false);
+          saveButton.textContent = "Save";
           setStatus(getErrorMessage(error), "error");
         })
         .saveNote(selectedDateKey, note);
     }
 
     function deleteNote() {
-      if (!selectedDateKey || isSaving) return;
-
-      if (!canUseAppsScript()) {
-        setStatus("Cannot delete. Open from Apps Script Web App URL.", "error");
+      if (!selectedDateKey) {
+        setStatus("Please click a date first.", "error");
         return;
       }
 
-      isSaving = true;
-      setModalButtonsDisabled(true);
+      if (!canUseAppsScript()) {
+        setStatus("Cannot delete. Open the deployed Apps Script /exec URL.", "error");
+        return;
+      }
+
+      deleteButton.textContent = "Deleting...";
       setStatus("Deleting from Google Sheet...");
 
       google.script.run
         .withSuccessHandler(function () {
           delete notesByDate[selectedDateKey];
-
           closeModal();
           renderCalendar(currentYear);
           setStatus("Deleted from Google Sheet.", "success");
         })
         .withFailureHandler(function (error) {
-          isSaving = false;
-          setModalButtonsDisabled(false);
+          deleteButton.textContent = "Delete";
           setStatus(getErrorMessage(error), "error");
         })
         .deleteNote(selectedDateKey);
@@ -515,18 +602,8 @@
       }
     }
 
-    function setModalButtonsDisabled(disabled) {
-      saveButton.disabled = disabled;
-      deleteButton.disabled = disabled;
-      cancelButton.disabled = disabled;
-    }
-
     function canUseAppsScript() {
-      return !!(
-        window.google &&
-        google.script &&
-        google.script.run
-      );
+      return !!(window.google && google.script && google.script.run);
     }
 
     function getErrorMessage(error) {
@@ -534,7 +611,7 @@
         return error.message;
       }
 
-      return "Google Sheet sync failed. Check Apps Script permissions, Code.gs, and deployment settings.";
+      return "Google Sheet sync failed. Check deployment, permissions, and spreadsheet connection.";
     }
 
     loadNotesForYear(currentYear);
