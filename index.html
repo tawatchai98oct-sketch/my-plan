@@ -561,9 +561,22 @@
       gap: 10px;
     }
 
+    .activity-list:empty::before {
+      content: "No activity rows. Click Save All to delete the selected activity, or Add Activity to keep editing.";
+      display: block;
+      padding: 14px;
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      background: var(--surface-muted);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+      text-align: center;
+    }
+
     .activity-row {
       display: grid;
-      grid-template-columns: 34px minmax(170px, 1.5fr) minmax(140px, 1fr) minmax(140px, 1fr) 42px;
+      grid-template-columns: 34px minmax(170px, 1.5fr) minmax(140px, 1fr) minmax(140px, 1fr) minmax(76px, 0.6fr) 42px;
       gap: 8px;
       align-items: end;
       padding: 10px;
@@ -597,6 +610,27 @@
       border-radius: 9px;
       font-size: 14px;
       background: white;
+    }
+
+    .activity-duration-value {
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 9px;
+      background: white;
+      color: #0f172a;
+      font-size: 14px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .activity-duration-value.invalid-duration {
+      color: #991b1b;
+      background: #fee2e2;
+      border-color: #fca5a5;
     }
 
     .row-error {
@@ -1418,10 +1452,13 @@
       }
 
       bar.style.top = String(21 + stackIndex * 14) + "px";
-      bar.title = activityInfo.title + " (" + activityInfo.start + " to " + activityInfo.end + ")";
+
+      const durationText = formatActivityDuration(activityInfo.start, activityInfo.end);
+      const durationShort = formatActivityDurationShort(activityInfo.start, activityInfo.end);
+      bar.title = activityInfo.title + " (" + activityInfo.start + " to " + activityInfo.end + ", " + durationText + ")";
 
       if (isSegmentStart) {
-        bar.textContent = activityInfo.title;
+        bar.textContent = activityInfo.title + (durationShort ? " · " + durationShort : "");
       }
 
       dateCell.appendChild(bar);
@@ -1629,6 +1666,28 @@
 
       row.appendChild(endGroup);
 
+      const durationGroup = document.createElement("div");
+      durationGroup.className = "field-group activity-duration";
+
+      const durationLabel = document.createElement("label");
+      durationLabel.textContent = "Days";
+      durationGroup.appendChild(durationLabel);
+
+      const durationValue = document.createElement("div");
+      durationValue.className = "activity-duration-value";
+      durationValue.setAttribute("aria-live", "polite");
+      durationGroup.appendChild(durationValue);
+
+      row.appendChild(durationGroup);
+
+      function updateDurationDisplay() {
+        const durationText = formatActivityDuration(startInput.value, endInput.value || startInput.value);
+        durationValue.textContent = durationText || "—";
+        durationValue.classList.toggle("invalid-duration", !durationText);
+      }
+
+      updateDurationDisplay();
+
       const removeButton = document.createElement("button");
       removeButton.type = "button";
       removeButton.className = "remove-activity-btn";
@@ -1639,12 +1698,7 @@
         renumberActivityRows();
 
         if (activityList.children.length === 0) {
-          addActivityRow({
-            id: createActivityId(),
-            title: "",
-            start: selectedDateKey,
-            end: selectedDateKey
-          });
+          setStatus("All activity rows removed. Click Save All to delete the selected activity.", "warning");
         }
       });
 
@@ -1660,11 +1714,16 @@
         if (isValidDateKey(startInput.value) && (!endInput.value || compareDateKeys(endInput.value, startInput.value) < 0)) {
           endInput.value = startInput.value;
         }
+
+        updateDurationDisplay();
       });
+
+      endInput.addEventListener("change", updateDurationDisplay);
 
       [titleInput, startInput, endInput].forEach(function (input) {
         input.addEventListener("input", function () {
           clearRowError(row);
+          updateDurationDisplay();
         });
       });
 
@@ -1974,6 +2033,31 @@
       };
     }
 
+    function getInclusiveDayCount(startKey, endKey) {
+      if (!isValidDateKey(startKey) || !isValidDateKey(endKey) || compareDateKeys(endKey, startKey) < 0) {
+        return 0;
+      }
+
+      const startDate = dateKeyToDate(startKey);
+      const endDate = dateKeyToDate(endKey);
+      return Math.round((endDate.getTime() - startDate.getTime()) / 86400000) + 1;
+    }
+
+    function formatActivityDuration(startKey, endKey) {
+      const dayCount = getInclusiveDayCount(startKey, endKey || startKey);
+
+      if (!dayCount) {
+        return "";
+      }
+
+      return String(dayCount) + " " + (dayCount === 1 ? "day" : "days");
+    }
+
+    function formatActivityDurationShort(startKey, endKey) {
+      const dayCount = getInclusiveDayCount(startKey, endKey || startKey);
+      return dayCount ? String(dayCount) + "d" : "";
+    }
+
     function createDateKey(year, month, day) {
       const monthNumber = String(month + 1).padStart(2, "0");
       const dayNumber = String(day).padStart(2, "0");
@@ -2170,13 +2254,15 @@
       }
 
       return ". Activities: " + activities.map(function (activity) {
-        return activity.title;
+        const durationText = formatActivityDuration(activity.start, activity.end);
+        return activity.title + (durationText ? " (" + durationText + ")" : "");
       }).join(", ") + ".";
     }
 
     function getHiddenActivityTitles(activities) {
       return activities.map(function (activity) {
-        return activity.title + " (" + activity.start + " to " + activity.end + ")";
+        const durationText = formatActivityDuration(activity.start, activity.end);
+        return activity.title + " (" + activity.start + " to " + activity.end + (durationText ? ", " + durationText : "") + ")";
       }).join("\n");
     }
 
