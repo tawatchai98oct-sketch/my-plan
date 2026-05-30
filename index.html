@@ -547,6 +547,7 @@
     .pending-pill.active { color: #166534; background: var(--success-soft); border-color: #bbf7d0; }
     .pending-pill.upcoming { color: var(--primary-dark); background: var(--primary-soft); border-color: #bfdbfe; }
     .pending-pill.due-today { color: #92400e; background: var(--warning-soft); border-color: #fde68a; }
+    .pending-pill.overdue { color: #991b1b; background: var(--danger-soft); border-color: #fecaca; }
 
     .pending-activity-remaining,
     .pending-activity-dates,
@@ -3597,10 +3598,6 @@
             return;
           }
 
-          if (compareDateKeys(normalizedActivity.end, todayKey) < 0) {
-            return;
-          }
-
           const uniqueKey = record.sourceKey + "::" + normalizedActivity.id;
           if (unique[uniqueKey]) {
             return;
@@ -3609,6 +3606,7 @@
           unique[uniqueKey] = true;
 
           const daysLeft = getDaysUntilDate(normalizedActivity.end);
+          const isOverdue = daysLeft < 0;
           const isUpcoming = compareDateKeys(normalizedActivity.start, todayKey) > 0;
           const isDueToday = daysLeft === 0;
 
@@ -3619,8 +3617,8 @@
             start: normalizedActivity.start,
             end: normalizedActivity.end,
             daysLeft: daysLeft,
-            statusText: isDueToday ? "Due today" : (isUpcoming ? "Upcoming" : "Active"),
-            statusClass: isDueToday ? "due-today" : (isUpcoming ? "upcoming" : "active"),
+            statusText: isOverdue ? "Overdue" : (isDueToday ? "Due today" : (isUpcoming ? "Upcoming" : "Active")),
+            statusClass: isOverdue ? "overdue" : (isDueToday ? "due-today" : (isUpcoming ? "upcoming" : "active")),
             remainingText: formatDaysLeft(daysLeft)
           });
         });
@@ -3658,10 +3656,15 @@
       const target = dateKeyToDate(dateKey);
       const difference = target.getTime() - today.getTime();
 
-      return Math.max(0, Math.ceil(difference / 86400000));
+      return Math.ceil(difference / 86400000);
     }
 
     function formatDaysLeft(dayCount) {
+      if (dayCount < 0) {
+        const overdueDays = Math.abs(dayCount);
+        return String(overdueDays) + " " + (overdueDays === 1 ? "day" : "days") + " overdue";
+      }
+
       if (dayCount === 0) {
         return "Due today";
       }
