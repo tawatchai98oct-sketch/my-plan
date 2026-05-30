@@ -4,27 +4,34 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <title>Full Year Schedule Planner</title>
+  <title>Planner</title>
 
   <style>
+
     :root {
-      --bg: #eef2f7;
+      --bg: #f8fafc;
       --surface: #ffffff;
-      --surface-muted: #f8fafc;
+      --surface-muted: #f3f4f6;
       --text: #111827;
       --muted: #6b7280;
+      --muted-2: #9ca3af;
       --border: #e5e7eb;
-      --border-strong: #cbd5e1;
+      --border-strong: #d1d5db;
       --primary: #2563eb;
-      --primary-soft: #dbeafe;
+      --primary-dark: #1d4ed8;
+      --primary-soft: #eff6ff;
       --danger: #dc2626;
-      --danger-soft: #fee2e2;
+      --danger-soft: #fef2f2;
       --success: #16a34a;
+      --success-soft: #f0fdf4;
       --warning: #d97706;
-      --holiday: #e11d48;
-      --holiday-soft: #ffe4e6;
-      --shadow: 0 12px 30px rgba(15, 23, 42, 0.10);
+      --warning-soft: #fffbeb;
+      --holiday: #db2777;
+      --holiday-soft: #fdf2f8;
+      --shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+      --shadow-soft: 0 2px 10px rgba(15, 23, 42, 0.05);
       --radius: 14px;
+      --radius-sm: 10px;
     }
 
     * {
@@ -37,19 +44,24 @@
 
     body {
       margin: 0;
-      font-family: Arial, Helvetica, sans-serif;
+      min-height: 100vh;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, Helvetica, sans-serif;
       background: var(--bg);
       color: var(--text);
+      font-size: 14px;
+      line-height: 1.4;
     }
 
     button,
-    input {
+    input,
+    textarea {
       font: inherit;
     }
 
     button:focus-visible,
-    input:focus-visible {
-      outline: 3px solid rgba(37, 99, 235, 0.35);
+    input:focus-visible,
+    textarea:focus-visible {
+      outline: 2px solid rgba(37, 99, 235, 0.32);
       outline-offset: 2px;
     }
 
@@ -57,139 +69,185 @@
       position: sticky;
       top: 0;
       z-index: 50;
-      background: linear-gradient(135deg, #111827, #1e293b);
-      color: white;
-      padding: 10px 18px;
-      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.20);
+      background: rgba(255, 255, 255, 0.94);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+
+    header::before,
+    .brand::before,
+    .activity-sidebar::before,
+    .month::before,
+    .modal::before {
+      display: none;
     }
 
     .header-inner {
-      max-width: 1500px;
+      max-width: 1840px;
       margin: 0 auto;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
+      padding: 10px 20px;
+      display: grid;
+      gap: 10px;
     }
 
     .header-top {
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+      gap: 12px;
       align-items: center;
-      justify-content: space-between;
-      gap: 14px;
     }
 
     .brand {
-      flex: 0 0 auto;
-      min-width: 230px;
+      min-width: 0;
+      padding-left: 0;
     }
 
     header h1 {
       margin: 0;
-      font-size: clamp(18px, 1.55vw, 24px);
-      line-height: 1.05;
-      letter-spacing: -0.03em;
-      text-align: left;
+      font-size: clamp(18px, 1.4vw, 22px);
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      font-weight: 700;
     }
 
     .subtitle {
-      margin: 4px 0 0;
-      color: #cbd5e1;
-      font-size: 11px;
-      line-height: 1.25;
-      text-align: left;
+      display: none;
     }
 
     .controls {
       display: flex;
       justify-content: flex-end;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
       flex-wrap: wrap;
       min-width: 0;
     }
 
     .controls button,
-    .controls input {
-      min-height: 32px;
-      padding: 6px 10px;
+    .controls input,
+    .modal-actions button,
+    .add-activity-btn,
+    .backlog-add-btn,
+    .backlog-note-actions button,
+    .pending-complete-btn,
+    .completion-toggle {
+      min-height: 36px;
+      padding: 7px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      color: var(--text);
       font-size: 13px;
-      border: 1px solid transparent;
-      border-radius: 999px;
-    }
-
-    .controls button {
-      background: #ffffff;
-      color: #111827;
+      font-weight: 600;
       cursor: pointer;
-      transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+      box-shadow: none;
+      transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
     }
 
-    .controls button:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 6px 16px rgba(15, 23, 42, 0.16);
-    }
-
-    .controls button:disabled {
-      opacity: 0.65;
-      cursor: not-allowed;
+    .controls button:hover,
+    .modal-actions button:hover,
+    .add-activity-btn:hover,
+    .backlog-add-btn:hover,
+    .backlog-note-actions button:hover,
+    .pending-complete-btn:hover,
+    .completion-toggle:hover {
+      background: var(--surface-muted);
+      border-color: var(--border-strong);
       transform: none;
       box-shadow: none;
     }
 
-    .controls button.range-active {
-      background: var(--primary);
-      color: white;
-      font-weight: 700;
+    .controls button:disabled,
+    .modal-actions button:disabled,
+    .add-activity-btn:disabled,
+    .backlog-add-btn:disabled,
+    .backlog-note-actions button:disabled,
+    .pending-complete-btn:disabled,
+    .remove-activity-btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .controls button.range-active,
+    .save-btn,
+    .add-activity-btn,
+    .backlog-add-btn,
+    #printButton {
+      background: var(--text);
+      color: #ffffff;
+      border-color: var(--text);
+    }
+
+    .controls button.range-active:hover,
+    .save-btn:hover,
+    .add-activity-btn:hover,
+    .backlog-add-btn:hover,
+    #printButton:hover {
+      background: #374151;
+      border-color: #374151;
+    }
+
+    #thisYearButton,
+    #reloadButton {
+      background: var(--surface);
     }
 
     .controls input {
-      background: rgba(255, 255, 255, 0.95);
-      color: #111827;
-      border-color: rgba(255, 255, 255, 0.28);
+      background: var(--surface);
+      color: var(--text);
+      cursor: text;
     }
 
     .controls input[type="number"] {
       width: 86px;
       text-align: center;
+      font-weight: 600;
     }
 
     .search-input {
-      width: min(230px, 92vw);
+      width: min(280px, 28vw);
+      padding-left: 12px !important;
     }
 
     .header-meta {
       display: grid;
-      grid-template-columns: minmax(240px, 1fr) auto;
+      grid-template-columns: minmax(260px, 1fr) auto;
       align-items: center;
       gap: 10px;
     }
 
     .status {
+      min-height: 28px;
       margin: 0;
-      max-width: none;
-      min-height: 0;
+      display: flex;
+      align-items: center;
       padding: 4px 10px;
-      border-radius: 999px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      color: var(--muted);
       font-size: 12px;
-      line-height: 1.25;
-      text-align: left;
-      color: #e5e7eb;
-    }
-
-    .status:not(:empty) {
-      background: rgba(255, 255, 255, 0.10);
+      font-weight: 500;
+      background: transparent;
     }
 
     .status.success {
-      color: #bbf7d0;
+      color: #166534;
+      background: var(--success-soft);
+      border-color: #bbf7d0;
     }
 
     .status.error {
-      color: #fecaca;
+      color: #991b1b;
+      background: var(--danger-soft);
+      border-color: #fecaca;
     }
 
     .status.warning {
-      color: #fde68a;
+      color: #92400e;
+      background: var(--warning-soft);
+      border-color: #fde68a;
     }
 
     .legend {
@@ -197,10 +255,9 @@
       justify-content: flex-end;
       align-items: center;
       flex-wrap: wrap;
-      gap: 6px 12px;
-      margin-top: 0;
-      color: #cbd5e1;
-      font-size: 11px;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
       white-space: nowrap;
     }
 
@@ -208,64 +265,277 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      min-height: 24px;
+      padding: 3px 8px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
     }
 
     .legend-swatch {
-      width: 10px;
-      height: 10px;
+      width: 8px;
+      height: 8px;
       border-radius: 999px;
-      border: 1px solid rgba(255, 255, 255, 0.25);
-      background: #ffffff;
+      background: var(--muted-2);
     }
 
-    .legend-swatch.today-swatch {
-      background: #fef3c7;
-      border-color: #f59e0b;
-    }
-
-    .legend-swatch.past-swatch {
-      background: #cbd5e1;
-    }
-
-    .legend-swatch.range-swatch {
-      background: var(--primary);
-    }
-
-    .legend-swatch.search-swatch {
-      background: #facc15;
-    }
-
-    .legend-swatch.holiday-swatch {
-      background: var(--holiday);
-    }
+    .legend-swatch.today-swatch { background: var(--primary); }
+    .legend-swatch.past-swatch { background: var(--muted-2); }
+    .legend-swatch.range-swatch { background: var(--primary); }
+    .legend-swatch.search-swatch { background: var(--warning); }
+    .legend-swatch.holiday-swatch { background: var(--holiday); }
 
     main {
-      max-width: 1500px;
+      max-width: 1840px;
       margin: 0 auto;
-      padding: 18px 22px 22px;
+      padding: 20px;
+    }
+
+    .planner-layout {
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .activity-sidebar {
+      position: sticky;
+      top: 92px;
+      max-height: calc(100vh - 112px);
+      overflow-y: auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .activity-sidebar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .activity-sidebar h2 {
+      margin: 0;
+      font-size: 16px;
+      letter-spacing: -0.01em;
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .activity-sidebar-help,
+    .modal-help {
+      display: none;
+    }
+
+    .pending-count,
+    .backlog-count,
+    .month-count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 28px;
+      height: 24px;
+      padding: 0 8px;
+      border-radius: 999px;
+      background: var(--surface-muted);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid var(--border);
+    }
+
+    .pending-activity-list,
+    .backlog-note-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .pending-activity-empty,
+    .backlog-note-empty,
+    .loading-message {
+      padding: 14px;
+      border: 1px dashed var(--border-strong);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    .pending-activity-card,
+    .backlog-note-card {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      text-align: left;
+      box-shadow: none;
+    }
+
+    .pending-activity-card:hover,
+    .backlog-note-card:hover {
+      border-color: var(--border-strong);
+      box-shadow: var(--shadow-soft);
+      transform: none;
+    }
+
+    .pending-activity-top {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: start;
+    }
+
+    .pending-activity-open {
+      width: 100%;
+      min-height: 24px;
+      padding: 0;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      text-align: left;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .pending-activity-open:hover {
+      color: var(--primary);
+    }
+
+    .pending-complete-btn {
+      min-height: 28px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      color: #166534;
+      border-color: #bbf7d0;
+      background: var(--success-soft);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .pending-complete-btn::before {
+      content: none;
+    }
+
+    .pending-activity-title,
+    .backlog-note-text {
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .pending-activity-meta {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .pending-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      border: 1px solid var(--border);
+      background: var(--surface-muted);
+      color: var(--muted);
+    }
+
+    .pending-pill.active { color: #166534; background: var(--success-soft); border-color: #bbf7d0; }
+    .pending-pill.upcoming { color: var(--primary-dark); background: var(--primary-soft); border-color: #bfdbfe; }
+    .pending-pill.due-today { color: #92400e; background: var(--warning-soft); border-color: #fde68a; }
+
+    .pending-activity-remaining,
+    .pending-activity-dates,
+    .pending-activity-duration,
+    .backlog-note-meta {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .sidebar-divider {
+      height: 1px;
+      margin: 14px 0;
+      background: var(--border);
+    }
+
+    .backlog-form {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 10px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      box-shadow: none;
+    }
+
+    .backlog-note-input {
+      width: 100%;
+      min-height: 70px;
+      resize: vertical;
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .backlog-note-actions {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+
+    .backlog-note-actions button {
+      min-height: 30px;
+      padding: 5px 8px;
+      font-size: 12px;
+    }
+
+    .backlog-schedule-btn {
+      color: #166534 !important;
+      border-color: #bbf7d0 !important;
+      background: var(--success-soft) !important;
+    }
+
+    .backlog-delete-btn {
+      color: #991b1b !important;
+      border-color: #fecaca !important;
+      background: var(--danger-soft) !important;
     }
 
     .year-grid {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 22px;
-    }
-
-    .loading-message {
-      grid-column: 1 / -1;
-      background: var(--surface);
-      border-radius: var(--radius);
-      padding: 22px;
-      text-align: center;
-      box-shadow: var(--shadow);
+      grid-template-columns: minmax(0, 1fr);
+      gap: 18px;
     }
 
     .month {
+      position: relative;
       background: var(--surface);
-      border: 1px solid rgba(203, 213, 225, 0.8);
+      border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 12px;
-      box-shadow: var(--shadow);
+      padding: 14px;
+      box-shadow: var(--shadow-soft);
       overflow: hidden;
     }
 
@@ -273,27 +543,15 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
       margin: 0 0 10px;
     }
 
     .month h2 {
       margin: 0;
       font-size: 18px;
-      letter-spacing: -0.02em;
-    }
-
-    .month-count {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 30px;
-      height: 24px;
-      padding: 0 8px;
-      border-radius: 999px;
-      background: #eff6ff;
-      color: #1d4ed8;
-      font-size: 12px;
+      letter-spacing: -0.01em;
+      color: var(--text);
       font-weight: 700;
     }
 
@@ -304,112 +562,115 @@
       text-align: center;
     }
 
+    .weekdays {
+      gap: 4px;
+      margin-bottom: 4px;
+    }
+
     .weekdays div {
-      font-weight: 700;
-      font-size: 11px;
       padding: 6px 0;
       color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
 
+    .days {
+      gap: 4px;
+    }
+
     .day {
-      min-height: 84px;
-      padding: 20px 4px 22px;
+      min-height: 82px;
+      padding: 22px 4px 22px;
       border: 1px solid var(--border);
-      font-size: 13px;
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 12px;
       cursor: pointer;
       position: relative;
       overflow: hidden;
-      background: #fff;
-      transition: background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
+      transition: background 0.14s ease, border-color 0.14s ease;
     }
 
     .day:hover {
-      background: #f8fafc;
-      border-color: var(--border-strong);
+      background: var(--primary-soft);
+      border-color: #bfdbfe;
       z-index: 2;
     }
 
     .day:active {
-      transform: scale(0.985);
+      transform: none;
     }
 
     .day.empty {
-      background: #f8fafc;
+      background: var(--surface-muted);
+      border-color: var(--border);
       cursor: default;
       pointer-events: none;
+      box-shadow: none;
     }
 
     .past-date {
-      background: #f1f5f9;
-      color: #64748b;
+      background: #f9fafb;
+      color: var(--muted-2);
     }
 
     .past-date:hover {
-      background: #e2e8f0;
+      background: #f3f4f6;
     }
 
     .today {
-      background: #fffbeb;
-      border: 2px solid #f59e0b;
-      color: #111827;
-      box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.18);
+      background: var(--primary-soft);
+      border: 2px solid var(--primary);
+      color: var(--text);
+    }
+
+    .day.range-start-selected,
+    .day.range-preview {
+      background: var(--primary-soft);
+      border-color: var(--primary);
     }
 
     .day.range-start-selected {
-      background: #bfdbfe;
-      border-color: var(--primary);
-      box-shadow: inset 0 0 0 2px var(--primary);
-    }
-
-    .day.range-preview {
-      background: var(--primary-soft);
-      border-color: #93c5fd;
+      box-shadow: inset 0 0 0 1px var(--primary);
     }
 
     .past-date.range-start-selected,
-    .past-date.range-preview {
-      color: #111827;
-    }
-
-    .today.range-start-selected {
-      background: #fde68a;
-      border-color: var(--primary);
-    }
-
+    .past-date.range-preview,
+    .today.range-start-selected,
     .today.range-preview {
-      background: #fef3c7;
-      border-color: #93c5fd;
+      color: var(--text);
     }
 
     .day.holiday-date {
-      border-color: rgba(225, 29, 72, 0.45);
-      box-shadow: inset 3px 0 0 var(--holiday);
+      border: 1px solid #fbcfe8;
+      box-shadow: none;
     }
 
     .day.holiday-date:not(.today):not(.range-preview):not(.range-start-selected) {
-      background: linear-gradient(90deg, var(--holiday-soft) 0, #ffffff 56%);
+      background: var(--holiday-soft);
     }
 
     .past-date.holiday-date:not(.range-preview):not(.range-start-selected) {
-      background: linear-gradient(90deg, #ffe4e6 0, #f1f5f9 58%);
+      background: #fdf2f8;
     }
 
     .holiday-badge {
       position: absolute;
       top: 5px;
       left: 5px;
-      max-width: calc(100% - 32px);
-      height: 15px;
+      max-width: calc(100% - 34px);
+      height: 17px;
       padding: 0 6px;
       border-radius: 999px;
-      background: var(--holiday-soft);
-      color: #9f1239;
-      border: 1px solid rgba(225, 29, 72, 0.20);
-      font-size: 8px;
-      font-weight: 800;
-      line-height: 14px;
+      background: #ffffff;
+      color: var(--holiday);
+      border: 1px solid #fbcfe8;
+      font-size: 9px;
+      font-weight: 700;
+      line-height: 16px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -418,103 +679,110 @@
     }
 
     .day.search-dim {
-      opacity: 0.38;
+      opacity: 0.35;
     }
 
     .day.search-match {
       opacity: 1;
-      border-color: #eab308;
-      box-shadow: inset 0 0 0 2px rgba(234, 179, 8, 0.8);
+      border-color: var(--warning);
+      box-shadow: inset 0 0 0 1px var(--warning);
     }
 
     .date-number {
-      font-weight: 800;
-      display: block;
       position: absolute;
       top: 5px;
       right: 6px;
-      min-width: 17px;
-      height: 17px;
-      line-height: 17px;
+      min-width: 22px;
+      height: 22px;
+      line-height: 22px;
       border-radius: 999px;
-      font-size: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
       z-index: 5;
     }
 
     .today .date-number {
-      background: #f59e0b;
-      color: white;
+      background: var(--primary);
+      color: #ffffff;
     }
 
     .activity-bar {
       position: absolute;
       left: -1px;
       right: -1px;
-      height: 13px;
-      padding: 0 6px;
-      color: white;
+      height: 14px;
+      padding: 0 7px;
+      color: #ffffff;
       border-radius: 0;
-      font-size: 9px;
-      font-weight: 700;
-      line-height: 13px;
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 14px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
       text-align: left;
       z-index: 2;
-      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.20);
+      box-shadow: none;
     }
 
     .bar-color-0 { background: #2563eb; }
     .bar-color-1 { background: #16a34a; }
-    .bar-color-2 { background: #dc2626; }
-    .bar-color-3 { background: #9333ea; }
-    .bar-color-4 { background: #ea580c; }
+    .bar-color-2 { background: #d97706; }
+    .bar-color-3 { background: #7c3aed; }
+    .bar-color-4 { background: #dc2626; }
     .bar-color-5 { background: #0891b2; }
 
     .activity-bar.segment-start {
       left: 4px;
-      border-top-left-radius: 8px;
-      border-bottom-left-radius: 8px;
+      border-top-left-radius: 999px;
+      border-bottom-left-radius: 999px;
     }
 
     .activity-bar.segment-end {
       right: 4px;
-      border-top-right-radius: 8px;
-      border-bottom-right-radius: 8px;
+      border-top-right-radius: 999px;
+      border-bottom-right-radius: 999px;
     }
 
     .activity-bar.segment-single {
       left: 4px;
       right: 4px;
-      border-radius: 8px;
+      border-radius: 999px;
+    }
+
+    .activity-bar.completed-activity-bar {
+      background: var(--muted-2);
+      color: #ffffff;
+      text-decoration: line-through;
+      opacity: 0.78;
     }
 
     .more-indicator {
       position: absolute;
-      left: 4px;
-      right: 4px;
+      left: 5px;
+      right: 5px;
       bottom: 5px;
-      height: 15px;
+      height: 17px;
       padding: 0 6px;
-      border: 1px solid #cbd5e1;
+      border: 1px solid var(--border);
       border-radius: 999px;
-      background: #f8fafc;
-      color: #334155;
-      font-size: 9px;
-      font-weight: 800;
-      line-height: 14px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 16px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
       text-align: center;
       z-index: 4;
-      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+      box-shadow: none;
     }
 
     .more-indicator:hover {
-      background: #e2e8f0;
-      border-color: #94a3b8;
+      background: var(--surface-muted);
+      border-color: var(--border-strong);
     }
 
     .modal-bg {
@@ -523,9 +791,11 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      background: rgba(15, 23, 42, 0.58);
-      padding: 18px;
+      background: rgba(17, 24, 39, 0.42);
+      padding: 20px;
       z-index: 999;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
     }
 
     .modal-bg[hidden] {
@@ -533,26 +803,23 @@
     }
 
     .modal {
-      background: var(--surface);
-      width: min(860px, 100%);
+      position: relative;
+      width: min(1040px, 100%);
       max-height: 88vh;
       overflow-y: auto;
-      border-radius: 18px;
-      padding: 20px;
-      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      box-shadow: 0 24px 70px rgba(15, 23, 42, 0.20);
     }
 
     .modal h3 {
-      margin: 0 0 8px;
-      font-size: 22px;
-      letter-spacing: -0.03em;
-    }
-
-    .modal-help {
       margin: 0 0 14px;
-      font-size: 13px;
-      color: var(--muted);
-      line-height: 1.45;
+      font-size: 20px;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      font-weight: 700;
     }
 
     .activity-list {
@@ -562,88 +829,140 @@
     }
 
     .activity-list:empty::before {
-      content: "No activity rows. Click Save All to delete the selected activity, or Add Activity to keep editing.";
+      content: "No activities.";
       display: block;
       padding: 14px;
-      border: 1px dashed var(--border);
-      border-radius: 12px;
-      background: var(--surface-muted);
+      border: 1px dashed var(--border-strong);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
       color: var(--muted);
       font-size: 13px;
-      line-height: 1.4;
       text-align: center;
     }
 
     .activity-row {
       display: grid;
-      grid-template-columns: 34px minmax(170px, 1.5fr) minmax(140px, 1fr) minmax(140px, 1fr) minmax(76px, 0.6fr) 42px;
+      grid-template-columns: 32px minmax(90px, 0.7fr) minmax(200px, 1.7fr) minmax(140px, 1fr) minmax(140px, 1fr) minmax(80px, 0.55fr) 38px;
       gap: 8px;
       align-items: end;
-      padding: 10px;
-      background: var(--surface-muted);
+      padding: 12px;
+      background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: var(--radius-sm);
+    }
+
+    .activity-row.completed-activity {
+      background: #f9fafb;
+      opacity: 0.88;
+    }
+
+    .activity-row.completed-activity .activity-title-input {
+      color: var(--muted);
+      text-decoration: line-through;
     }
 
     .activity-number {
-      height: 38px;
+      height: 36px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-weight: 800;
-      color: #374151;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
     }
 
+    .completion-group label,
     .field-group label {
       display: block;
-      margin-bottom: 4px;
-      font-size: 12px;
-      font-weight: 800;
-      color: #374151;
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .completion-toggle {
+      width: 100%;
+      justify-content: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .completion-toggle::before {
+      content: "";
+      width: 14px;
+      height: 14px;
+      border: 1.5px solid var(--border-strong);
+      border-radius: 4px;
+      background: var(--surface);
+      flex: 0 0 auto;
+    }
+
+    .completion-toggle.is-completed {
+      background: var(--success-soft);
+      color: #166534;
+      border-color: #bbf7d0;
+    }
+
+    .completion-toggle.is-completed::before {
+      content: "✓";
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #166534;
+      border-color: var(--success);
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1;
     }
 
     .field-group input {
       width: 100%;
-      min-height: 38px;
-      padding: 8px 10px;
-      border: 1px solid #cbd5e1;
-      border-radius: 9px;
-      font-size: 14px;
-      background: white;
+      min-height: 36px;
+      padding: 7px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    .field-group input:focus {
+      border-color: var(--primary);
     }
 
     .activity-duration-value {
-      min-height: 38px;
+      min-height: 36px;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 8px 10px;
-      border: 1px solid #cbd5e1;
-      border-radius: 9px;
-      background: white;
-      color: #0f172a;
-      font-size: 14px;
-      font-weight: 800;
+      padding: 7px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
       white-space: nowrap;
     }
 
     .activity-duration-value.invalid-duration {
       color: #991b1b;
-      background: #fee2e2;
-      border-color: #fca5a5;
+      background: var(--danger-soft);
+      border-color: #fecaca;
     }
 
     .row-error {
       grid-column: 2 / -1;
       margin-top: -2px;
-      color: var(--danger);
+      color: #991b1b;
       font-size: 12px;
+      font-weight: 600;
       display: none;
     }
 
     .activity-row.has-error {
-      border-color: #fca5a5;
-      background: #fff7f7;
+      border-color: #fecaca;
+      background: var(--danger-soft);
     }
 
     .activity-row.has-error .row-error {
@@ -651,32 +970,29 @@
     }
 
     .remove-activity-btn {
-      width: 38px;
-      height: 38px;
-      border: none;
-      border-radius: 9px;
+      width: 36px;
+      height: 36px;
+      border: 1px solid #fecaca;
+      border-radius: var(--radius-sm);
       background: var(--danger-soft);
       color: #991b1b;
       cursor: pointer;
       font-size: 20px;
       line-height: 1;
+      font-weight: 600;
     }
 
     .remove-activity-btn:hover {
-      background: #fecaca;
+      background: #fee2e2;
+      transform: none;
     }
 
     .add-activity-btn {
       margin-top: 12px;
       min-height: 38px;
-      padding: 9px 13px;
-      border: none;
-      border-radius: 9px;
-      background: #111827;
-      color: white;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 700;
+      padding: 8px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
     }
 
     .modal-actions {
@@ -684,94 +1000,85 @@
       justify-content: flex-end;
       align-items: center;
       gap: 8px;
-      margin-top: 16px;
+      margin-top: 14px;
       flex-wrap: wrap;
     }
 
     .modal-actions button {
       min-height: 38px;
       padding: 8px 14px;
-      border: none;
-      border-radius: 9px;
-      cursor: pointer;
-      font-weight: 700;
-    }
-
-    .modal-actions button:disabled,
-    .add-activity-btn:disabled,
-    .remove-activity-btn:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    .save-btn {
-      background: var(--primary);
-      color: white;
+      border-radius: var(--radius-sm);
     }
 
     .close-btn {
-      background: #e5e7eb;
-      color: #111827;
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    @media (max-width: 1280px) {
+      .planner-layout {
+        grid-template-columns: 300px minmax(0, 1fr);
+      }
+
+      .activity-row {
+        grid-template-columns: 30px minmax(84px, 0.7fr) minmax(170px, 1.4fr) minmax(126px, 1fr) minmax(126px, 1fr) minmax(70px, 0.55fr) 36px;
+      }
     }
 
     @media (max-width: 1160px) {
-      .year-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+      .planner-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .activity-sidebar {
+        position: static;
+        max-height: none;
       }
     }
 
     @media (max-width: 980px) {
-      .header-top {
-        align-items: flex-start;
-        flex-direction: column;
-      }
-
-      .brand {
-        min-width: 0;
-      }
-
-      .controls {
-        justify-content: flex-start;
-        width: 100%;
-      }
-
-      .header-meta {
-        grid-template-columns: 1fr;
-        gap: 6px;
-      }
-
-      .status {
-        text-align: center;
-      }
-
-      .legend {
-        justify-content: center;
-        white-space: normal;
-      }
-    }
-
-    @media (max-width: 820px) {
       header {
         position: static;
       }
 
+      .header-top,
+      .header-meta {
+        grid-template-columns: 1fr;
+      }
+
+      .controls,
+      .legend {
+        justify-content: flex-start;
+      }
+
+      .search-input {
+        width: min(320px, 100%);
+      }
+    }
+
+    @media (max-width: 820px) {
       main {
         padding: 14px;
       }
 
       .year-grid {
-        grid-template-columns: 1fr;
-        gap: 16px;
+        gap: 14px;
+      }
+
+      .month {
+        padding: 12px;
       }
 
       .day {
-        min-height: 78px;
+        min-height: 76px;
       }
 
       .activity-row {
         grid-template-columns: 28px 1fr;
       }
 
+      .activity-row .completion-group,
       .activity-row .field-group,
       .activity-row .row-error {
         grid-column: 2 / 3;
@@ -790,24 +1097,42 @@
       .add-activity-btn {
         width: 100%;
       }
+
+      .backlog-note-actions {
+        grid-template-columns: 1fr;
+      }
     }
 
-    @media (max-width: 520px) {
+    @media (max-width: 620px) {
+      .header-inner {
+        padding: 10px 12px;
+      }
+
       .controls {
         align-items: stretch;
       }
 
       .controls button,
       .controls input {
-        flex: 1 1 calc(50% - 10px);
+        flex: 1 1 calc(50% - 8px);
       }
 
       .controls .search-input {
         flex-basis: 100%;
+        width: 100%;
+      }
+
+      .weekdays,
+      .days {
+        gap: 3px;
+      }
+
+      .weekdays div {
+        font-size: 10px;
       }
 
       .day {
-        min-height: 74px;
+        min-height: 70px;
         padding-left: 2px;
         padding-right: 2px;
       }
@@ -825,7 +1150,8 @@
       }
 
       header,
-      .modal-bg {
+      .modal-bg,
+      .activity-sidebar {
         display: none !important;
       }
 
@@ -838,8 +1164,12 @@
         padding: 0;
       }
 
+      .planner-layout {
+        display: block;
+      }
+
       .year-grid {
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: 1fr;
         gap: 8px;
       }
 
@@ -856,16 +1186,13 @@
       }
 
       .more-indicator,
-      .holiday-badge {
-        print-color-adjust: exact;
-        -webkit-print-color-adjust: exact;
-      }
-
+      .holiday-badge,
       .activity-bar {
         print-color-adjust: exact;
         -webkit-print-color-adjust: exact;
       }
     }
+
   </style>
 </head>
 
@@ -874,39 +1201,65 @@
     <div class="header-inner">
       <div class="header-top">
         <div class="brand">
-          <h1>Full Year Schedule Planner</h1>
-          <p class="subtitle">Plan tasks or ranges, then save to Google Sheets.</p>
+          <h1>Planner</h1>
+          <p class="subtitle"></p>
         </div>
 
         <div class="controls" aria-label="Calendar controls">
-          <button type="button" id="prevYearButton" aria-label="Previous year">Previous</button>
+          <button type="button" id="prevYearButton" aria-label="Previous year">Prev</button>
           <input type="number" id="yearInput" min="1900" max="9999" aria-label="Year" />
           <button type="button" id="nextYearButton" aria-label="Next year">Next</button>
-          <button type="button" id="thisYearButton">This Year</button>
+          <button type="button" id="thisYearButton">Today</button>
           <button type="button" id="rangeSelectButton">Range</button>
-          <button type="button" id="reloadButton">Reload</button>
+          <button type="button" id="reloadButton">Sync</button>
           <button type="button" id="printButton">Print</button>
           <input type="search" id="activitySearchInput" class="search-input" placeholder="Search activities" aria-label="Search activities" />
-          <button type="button" id="clearSearchButton">Clear</button>
+          <button type="button" id="clearSearchButton">Reset</button>
         </div>
       </div>
 
       <div class="header-meta">
-        <div id="status" class="status" role="status" aria-live="polite">Opening planner...</div>
+        <div id="status" class="status" role="status" aria-live="polite">Ready</div>
 
         <div class="legend" aria-label="Calendar legend">
           <span class="legend-item"><span class="legend-swatch today-swatch"></span>Today</span>
           <span class="legend-item"><span class="legend-swatch past-swatch"></span>Past</span>
           <span class="legend-item"><span class="legend-swatch range-swatch"></span>Range</span>
           <span class="legend-item"><span class="legend-swatch search-swatch"></span>Search</span>
-          <span class="legend-item"><span class="legend-swatch holiday-swatch"></span>Thai holiday</span>
+          <span class="legend-item"><span class="legend-swatch holiday-swatch"></span>Holiday</span>
         </div>
       </div>
     </div>
   </header>
 
   <main>
-    <div id="calendar" class="year-grid" aria-live="polite"></div>
+    <div class="planner-layout">
+      <aside class="activity-sidebar" aria-labelledby="pendingActivitiesTitle">
+        <div class="activity-sidebar-header">
+          <h2 id="pendingActivitiesTitle">Open</h2>
+          <span id="pendingActivityCount" class="pending-count">0</span>
+        </div>
+        <p class="activity-sidebar-help"></p>
+        <div id="pendingActivityList" class="pending-activity-list" aria-live="polite"></div>
+
+        <div class="sidebar-divider" aria-hidden="true"></div>
+
+        <section class="backlog-section" aria-labelledby="backlogNotesTitle">
+          <div class="activity-sidebar-header backlog-header">
+            <h2 id="backlogNotesTitle">Notes</h2>
+            <span id="backlogNoteCount" class="backlog-count">0</span>
+          </div>
+          <p class="activity-sidebar-help"></p>
+          <div class="backlog-form">
+            <textarea id="backlogNoteInput" class="backlog-note-input" rows="3" placeholder="Add note" aria-label="Unscheduled work note"></textarea>
+            <button type="button" id="addBacklogNoteButton" class="backlog-add-btn">Add</button>
+          </div>
+          <div id="backlogNoteList" class="backlog-note-list" aria-live="polite"></div>
+        </section>
+      </aside>
+
+      <div id="calendar" class="year-grid" aria-live="polite"></div>
+    </div>
   </main>
 
   <div class="modal-bg" id="modalBg" hidden>
@@ -914,16 +1267,16 @@
       <h3 id="modalDate"></h3>
 
       <p class="modal-help" id="modalHelp">
-        Normal click opens activities on one date. Use Range Select, then click a start date and end date to create a new activity range.
+        
       </p>
 
       <div id="activityList" class="activity-list"></div>
 
-      <button type="button" class="add-activity-btn" id="addActivityButton">+ Add Activity</button>
+      <button type="button" class="add-activity-btn" id="addActivityButton">Add Activity</button>
 
       <div class="modal-actions">
         <button type="button" class="close-btn" id="cancelButton">Cancel</button>
-        <button type="button" class="save-btn" id="saveButton">Save All</button>
+        <button type="button" class="save-btn" id="saveButton">Save</button>
       </div>
     </div>
   </div>
@@ -932,6 +1285,7 @@
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwHUmxDQ6GaMJWKRTrxcin5g-UrrwKIOodInRKKnoCpbINW6_gCq0eSDSxQO7R8eizIyg/exec";
 
     const ACTIVITIES_PREFIX = "__ACTIVITIES_V2__";
+    const UNSCHEDULED_NOTES_PREFIX = "__UNSCHEDULED_NOTES_V1__";
     const OLD_RANGE_PREFIX = "__RANGE_ACTIVITY__";
     const MAX_VISIBLE_BARS = 3;
 
@@ -986,6 +1340,12 @@
     const weekdayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
     const calendar = document.getElementById("calendar");
+    const pendingActivityList = document.getElementById("pendingActivityList");
+    const pendingActivityCount = document.getElementById("pendingActivityCount");
+    const backlogNoteInput = document.getElementById("backlogNoteInput");
+    const addBacklogNoteButton = document.getElementById("addBacklogNoteButton");
+    const backlogNoteList = document.getElementById("backlogNoteList");
+    const backlogNoteCount = document.getElementById("backlogNoteCount");
     const yearInput = document.getElementById("yearInput");
     const statusBox = document.getElementById("status");
 
@@ -1007,6 +1367,8 @@
     let notesCacheByYear = {};
     let dateCellByKey = {};
     let activitiesByDate = {};
+    let backlogNotes = [];
+    let pendingScheduledBacklogNoteId = "";
     let isBusy = false;
     let activitySearchTerm = "";
     let lastFocusedElement = null;
@@ -1051,6 +1413,17 @@
       activitySearchTerm = "";
       applySearchHighlight(true);
       activitySearchInput.focus();
+    });
+
+    addBacklogNoteButton.addEventListener("click", function () {
+      addBacklogNoteFromInput();
+    });
+
+    backlogNoteInput.addEventListener("keydown", function (event) {
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        event.preventDefault();
+        addBacklogNoteFromInput();
+      }
     });
 
     addActivityButton.addEventListener("click", function () {
@@ -1127,12 +1500,12 @@
       if (hasAllCachedYears) {
         notesByDate = mergeCachedNotes(yearsToLoad);
         renderCalendar(year);
-        setStatus("Loaded from memory. Adjacent years included for cross-year activity ranges.", "success");
+        setStatus("Loaded.", "success");
         return Promise.resolve(notesByDate);
       }
 
       calendar.innerHTML = '<div class="loading-message">Loading notes...</div>';
-      setStatus("Loading notes from Google Sheet...");
+      setStatus("Loading...");
 
       return Promise.all(yearsToLoad.map(function (yearToLoad) {
         return loadSingleYearNotes(yearToLoad, forceReload);
@@ -1144,8 +1517,8 @@
           const currentYearCount = Object.keys(notesCacheByYear[year] || {}).length;
           const mergedCount = Object.keys(notesByDate).length;
           setStatus(
-            "Loaded from Google Sheet. Current-year records: " + currentYearCount +
-            ". Records loaded including adjacent years: " + mergedCount + ".",
+            "Loaded. Records: " + currentYearCount +
+            ". Total: " + mergedCount + ".",
             "success"
           );
 
@@ -1185,6 +1558,9 @@
       calendar.innerHTML = "";
       dateCellByKey = {};
       rebuildActivitiesMap();
+      loadBacklogNotesForYear(year);
+      renderPendingActivitiesSidebar();
+      renderBacklogNotes();
 
       const fragment = document.createDocumentFragment();
       const today = new Date();
@@ -1278,7 +1654,7 @@
           if (thailandHolidays.length > 0) {
             const holidayBadge = document.createElement("span");
             holidayBadge.className = "holiday-badge";
-            holidayBadge.textContent = thailandHolidays.length > 1 ? String(thailandHolidays.length) + " holidays" : "Thai holiday";
+            holidayBadge.textContent = thailandHolidays.join(" / ");
             holidayBadge.title = thailandHolidays.join("\n");
             dateCell.appendChild(holidayBadge);
           }
@@ -1334,7 +1710,7 @@
         rangeStartDateKey = dateKey;
         clearRangeSelection();
         markRangeStartDate();
-        setStatus("Start date selected. Now click the end date.", "success");
+        setStatus("Select end date.", "success");
         return;
       }
 
@@ -1355,7 +1731,7 @@
       rangeSelectButton.classList.add("range-active");
       rangeSelectButton.textContent = "Cancel Range";
       clearRangeSelection();
-      setStatus("Range Select is active. Click a start date.", "success");
+      setStatus("Select start date.", "success");
     }
 
     function cancelRangeSelectMode(showStatus) {
@@ -1366,7 +1742,7 @@
       clearRangeSelection();
 
       if (showStatus) {
-        setStatus("Range selection cancelled.", "warning");
+        setStatus("Range cancelled.", "warning");
       }
     }
 
@@ -1439,6 +1815,10 @@
       const bar = document.createElement("span");
       bar.className = "activity-bar bar-color-" + String(activityInfo.colorIndex % 6);
 
+      if (activityInfo.completed) {
+        bar.classList.add("completed-activity-bar");
+      }
+
       if (isSegmentStart && isSegmentEnd) {
         bar.classList.add("segment-single");
       } else {
@@ -1455,10 +1835,11 @@
 
       const durationText = formatActivityDuration(activityInfo.start, activityInfo.end);
       const durationShort = formatActivityDurationShort(activityInfo.start, activityInfo.end);
-      bar.title = activityInfo.title + " (" + activityInfo.start + " to " + activityInfo.end + ", " + durationText + ")";
+      const completionText = activityInfo.completed ? "Completed, " : "";
+      bar.title = activityInfo.title + " (" + completionText + activityInfo.start + " to " + activityInfo.end + ", " + durationText + ")";
 
       if (isSegmentStart) {
-        bar.textContent = activityInfo.title + (durationShort ? " · " + durationShort : "");
+        bar.textContent = (activityInfo.completed ? "✓ " : "") + activityInfo.title + (durationShort ? " · " + durationShort : "");
       }
 
       dateCell.appendChild(bar);
@@ -1494,6 +1875,7 @@
               title: normalizedActivity.title,
               start: normalizedActivity.start,
               end: normalizedActivity.end,
+              completed: normalizedActivity.completed,
               colorIndex: getStableColorIndex(normalizedActivity.id + normalizedActivity.title)
             });
           });
@@ -1502,6 +1884,11 @@
 
       Object.keys(activitiesByDate).forEach(function (dateKey) {
         activitiesByDate[dateKey].sort(function (a, b) {
+          const completionComparison = Number(a.completed) - Number(b.completed);
+          if (completionComparison !== 0) {
+            return completionComparison;
+          }
+
           const startComparison = compareDateKeys(a.start, b.start);
           if (startComparison !== 0) {
             return startComparison;
@@ -1556,6 +1943,7 @@
               title: normalizedActivity.title || "",
               start: normalizedActivity.start || selectedDateKey,
               end: normalizedActivity.end || selectedDateKey,
+              completed: normalizedActivity.completed,
               originalSourceKey: sourceKey
             });
           }
@@ -1568,6 +1956,7 @@
           title: "",
           start: selectedDateKey,
           end: selectedDateKey,
+          completed: false,
           originalSourceKey: ""
         });
       }
@@ -1591,6 +1980,7 @@
         title: "",
         start: startKey,
         end: endKey,
+        completed: false,
         originalSourceKey: ""
       });
 
@@ -1613,10 +2003,41 @@
       row.className = "activity-row";
       row.dataset.activityId = activity.id || createActivityId();
       row.dataset.originalSourceKey = activity.originalSourceKey || "";
+      row.dataset.completed = activity.completed ? "true" : "false";
 
       const number = document.createElement("div");
       number.className = "activity-number";
       row.appendChild(number);
+
+      const completionGroup = document.createElement("div");
+      completionGroup.className = "completion-group";
+
+      const completionLabel = document.createElement("label");
+      completionLabel.textContent = "Status";
+      completionGroup.appendChild(completionLabel);
+
+      const completionButton = document.createElement("button");
+      completionButton.type = "button";
+      completionButton.className = "completion-toggle";
+      completionButton.setAttribute("aria-pressed", row.dataset.completed === "true" ? "true" : "false");
+      completionGroup.appendChild(completionButton);
+
+      row.appendChild(completionGroup);
+
+      function updateCompletionDisplay() {
+        const isCompleted = row.dataset.completed === "true";
+        row.classList.toggle("completed-activity", isCompleted);
+        completionButton.classList.toggle("is-completed", isCompleted);
+        completionButton.textContent = isCompleted ? "Done" : "Open";
+        completionButton.setAttribute("aria-pressed", isCompleted ? "true" : "false");
+        completionButton.setAttribute("aria-label", isCompleted ? "Mark open" : "Mark done");
+      }
+
+      completionButton.addEventListener("click", function () {
+        row.dataset.completed = row.dataset.completed === "true" ? "false" : "true";
+        updateCompletionDisplay();
+        sortActivityRowsByCompletion();
+      });
 
       const titleGroup = document.createElement("div");
       titleGroup.className = "field-group";
@@ -1687,6 +2108,7 @@
       }
 
       updateDurationDisplay();
+      updateCompletionDisplay();
 
       const removeButton = document.createElement("button");
       removeButton.type = "button";
@@ -1698,7 +2120,7 @@
         renumberActivityRows();
 
         if (activityList.children.length === 0) {
-          setStatus("All activity rows removed. Click Save All to delete the selected activity.", "warning");
+          setStatus("No activities.", "warning");
         }
       });
 
@@ -1728,6 +2150,31 @@
       });
 
       activityList.appendChild(row);
+      sortActivityRowsByCompletion();
+      renumberActivityRows();
+    }
+
+    function sortActivityRowsByCompletion() {
+      const rows = Array.from(activityList.children);
+      rows.sort(function (a, b) {
+        const completionComparison = Number(a.dataset.completed === "true") - Number(b.dataset.completed === "true");
+        if (completionComparison !== 0) {
+          return completionComparison;
+        }
+
+        const aEnd = a.querySelector(".activity-end-input") ? a.querySelector(".activity-end-input").value : "";
+        const bEnd = b.querySelector(".activity-end-input") ? b.querySelector(".activity-end-input").value : "";
+        if (aEnd && bEnd && aEnd !== bEnd) {
+          return compareDateKeys(aEnd, bEnd);
+        }
+
+        return 0;
+      });
+
+      rows.forEach(function (row) {
+        activityList.appendChild(row);
+      });
+
       renumberActivityRows();
     }
 
@@ -1796,12 +2243,19 @@
           title: title,
           start: start,
           end: end,
+          completed: row.dataset.completed === "true",
           originalSourceKey: row.dataset.originalSourceKey || ""
         });
       }
 
       const groupedBySourceKey = buildUpdatedActivityGroups(newActivities);
       const sourceKeysToSave = Object.keys(groupedBySourceKey);
+      const scheduledBacklogNoteId = pendingScheduledBacklogNoteId;
+      const updatedBacklogNotesAfterScheduling = scheduledBacklogNoteId
+        ? backlogNotes.filter(function (note) {
+            return note.id !== scheduledBacklogNoteId;
+          })
+        : null;
 
       if (sourceKeysToSave.length === 0) {
         closeModal();
@@ -1811,7 +2265,7 @@
 
       isBusy = true;
       setModalBusy(true, "save");
-      setStatus("Saving activities to Google Sheet...");
+      setStatus("Saving...");
 
       const tasks = sourceKeysToSave.map(function (sourceKey) {
         const activities = groupedBySourceKey[sourceKey];
@@ -1828,6 +2282,13 @@
         });
       });
 
+      if (scheduledBacklogNoteId) {
+        tasks.push(callAppsScript("saveNote", {
+          dateKey: getBacklogSourceKey(currentYear),
+          note: encodeBacklogNotesValue(updatedBacklogNotesAfterScheduling)
+        }));
+      }
+
       Promise.all(tasks)
         .then(function () {
           sourceKeysToSave.forEach(function (sourceKey) {
@@ -1840,9 +2301,16 @@
             }
           });
 
+          if (scheduledBacklogNoteId) {
+            backlogNotes = updatedBacklogNotesAfterScheduling;
+            setLocalNote(getBacklogSourceKey(currentYear), encodeBacklogNotesValue(backlogNotes));
+            saveBacklogNotesToLocalStorage(currentYear, backlogNotes);
+            pendingScheduledBacklogNoteId = "";
+          }
+
           closeModal();
           renderCalendar(currentYear);
-          setStatus("Activities saved.", "success");
+          setStatus(scheduledBacklogNoteId ? "Scheduled." : "Saved.", "success");
         })
         .catch(function (error) {
           isBusy = false;
@@ -1891,7 +2359,8 @@
           id: activity.id || createActivityId(),
           title: activity.title,
           start: activity.start,
-          end: activity.end
+          end: activity.end,
+          completed: activity.completed === true
         });
       });
 
@@ -1914,6 +2383,7 @@
       document.body.style.overflow = "";
       selectedDateKey = "";
       selectedSourceKeys = [];
+      pendingScheduledBacklogNoteId = "";
       activityList.innerHTML = "";
       isBusy = false;
       setModalBusy(false);
@@ -1952,6 +2422,13 @@
         };
       }
 
+      if (typeof value === "string" && value.indexOf(UNSCHEDULED_NOTES_PREFIX) === 0) {
+        return {
+          type: "unscheduled",
+          activities: []
+        };
+      }
+
       const safeFallbackDateKey = isValidDateKey(fallbackDateKey) ? fallbackDateKey : "";
 
       if (typeof value === "string" && value.indexOf(ACTIVITIES_PREFIX) === 0) {
@@ -1969,7 +2446,8 @@
                   id: activity.id || createActivityId(),
                   title: String(activity.title || ""),
                   start: start,
-                  end: end
+                  end: end,
+                  completed: activity.completed === true
                 };
               })
             };
@@ -1995,7 +2473,8 @@
                 id: oldData.id || createActivityId(),
                 title: oldData.title || "",
                 start: start,
-                end: end
+                end: end,
+                completed: oldData.completed === true
               }
             ]
           };
@@ -2014,7 +2493,8 @@
             id: createActivityId(),
             title: String(value),
             start: safeFallbackDateKey,
-            end: safeFallbackDateKey
+            end: safeFallbackDateKey,
+            completed: false
           }
         ]
       };
@@ -2029,7 +2509,8 @@
         id: activity.id || createActivityId(),
         title: String(activity.title || ""),
         start: start,
-        end: end
+        end: end,
+        completed: activity.completed === true
       };
     }
 
@@ -2204,6 +2685,563 @@
     }
 
 
+    function getBacklogSourceKey(year) {
+      return String(year) + "-unscheduled-notes";
+    }
+
+    function getBacklogStorageKey(year) {
+      return "fullYearPlannerBacklogNotes:" + String(year);
+    }
+
+    function encodeBacklogNotesValue(notes) {
+      return UNSCHEDULED_NOTES_PREFIX + JSON.stringify({
+        version: 1,
+        notes: normalizeBacklogNotes(notes)
+      });
+    }
+
+    function parseBacklogNotesValue(value) {
+      if (typeof value !== "string" || value.indexOf(UNSCHEDULED_NOTES_PREFIX) !== 0) {
+        return [];
+      }
+
+      try {
+        const data = JSON.parse(value.slice(UNSCHEDULED_NOTES_PREFIX.length));
+        return normalizeBacklogNotes(data && Array.isArray(data.notes) ? data.notes : []);
+      } catch (error) {
+        return [];
+      }
+    }
+
+    function normalizeBacklogNotes(notes) {
+      return (Array.isArray(notes) ? notes : [])
+        .map(function (note) {
+          return {
+            id: note && note.id ? String(note.id) : createActivityId(),
+            text: String(note && note.text || "").trim(),
+            createdAt: note && note.createdAt ? String(note.createdAt) : new Date().toISOString(),
+            updatedAt: note && note.updatedAt ? String(note.updatedAt) : ""
+          };
+        })
+        .filter(function (note) {
+          return note.text.length > 0;
+        });
+    }
+
+    function loadBacklogNotesForYear(year) {
+      const sourceKey = getBacklogSourceKey(year);
+      const sheetValue = notesByDate[sourceKey] || "";
+      const sheetNotes = parseBacklogNotesValue(sheetValue);
+
+      if (sheetNotes.length > 0 || sheetValue) {
+        backlogNotes = sheetNotes;
+        saveBacklogNotesToLocalStorage(year, backlogNotes);
+        return;
+      }
+
+      backlogNotes = loadBacklogNotesFromLocalStorage(year);
+    }
+
+    function loadBacklogNotesFromLocalStorage(year) {
+      try {
+        return normalizeBacklogNotes(JSON.parse(window.localStorage.getItem(getBacklogStorageKey(year)) || "[]"));
+      } catch (error) {
+        return [];
+      }
+    }
+
+    function saveBacklogNotesToLocalStorage(year, notes) {
+      try {
+        window.localStorage.setItem(getBacklogStorageKey(year), JSON.stringify(normalizeBacklogNotes(notes)));
+      } catch (error) {
+        // Local storage is a fallback only. Google Sheet saving still runs.
+      }
+    }
+
+    function addBacklogNoteFromInput() {
+      if (isBusy) {
+        return;
+      }
+
+      const text = backlogNoteInput.value.trim();
+      if (!text) {
+        setStatus("Write a note first.", "warning");
+        backlogNoteInput.focus();
+        return;
+      }
+
+      backlogNotes.unshift({
+        id: createActivityId(),
+        text: text,
+        createdAt: new Date().toISOString(),
+        updatedAt: ""
+      });
+
+      backlogNoteInput.value = "";
+      persistBacklogNotes("Note saved.");
+    }
+
+    function renderBacklogNotes() {
+      if (!backlogNoteList || !backlogNoteCount) {
+        return;
+      }
+
+      backlogNoteCount.textContent = String(backlogNotes.length);
+      backlogNoteList.innerHTML = "";
+
+      if (backlogNotes.length === 0) {
+        const emptyMessage = document.createElement("div");
+        emptyMessage.className = "backlog-note-empty";
+        emptyMessage.textContent = "No notes.";
+        backlogNoteList.appendChild(emptyMessage);
+        return;
+      }
+
+      backlogNotes.forEach(function (note) {
+        const card = document.createElement("div");
+        card.className = "backlog-note-card";
+
+        const textBlock = document.createElement("div");
+        textBlock.className = "backlog-note-text";
+        textBlock.textContent = note.text;
+        card.appendChild(textBlock);
+
+        const meta = document.createElement("div");
+        meta.className = "backlog-note-meta";
+        meta.textContent = "Added " + formatBacklogTimestamp(note.createdAt);
+        card.appendChild(meta);
+
+        const actions = document.createElement("div");
+        actions.className = "backlog-note-actions";
+
+        const scheduleButton = document.createElement("button");
+        scheduleButton.type = "button";
+        scheduleButton.className = "backlog-schedule-btn";
+        scheduleButton.textContent = "Schedule";
+        scheduleButton.addEventListener("click", function () {
+          scheduleBacklogNote(note.id);
+        });
+        actions.appendChild(scheduleButton);
+
+        const editButton = document.createElement("button");
+        editButton.type = "button";
+        editButton.textContent = "Edit";
+        editButton.addEventListener("click", function () {
+          editBacklogNote(note.id);
+        });
+        actions.appendChild(editButton);
+
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "backlog-delete-btn";
+        deleteButton.textContent = "Delete";
+        deleteButton.addEventListener("click", function () {
+          deleteBacklogNote(note.id);
+        });
+        actions.appendChild(deleteButton);
+
+        card.appendChild(actions);
+        backlogNoteList.appendChild(card);
+      });
+    }
+
+    function persistBacklogNotes(successMessage) {
+      if (isBusy) {
+        return;
+      }
+
+      isBusy = true;
+      addBacklogNoteButton.disabled = true;
+      setStatus("Saving...");
+
+      const normalizedNotes = normalizeBacklogNotes(backlogNotes);
+      callAppsScript("saveNote", {
+        dateKey: getBacklogSourceKey(currentYear),
+        note: encodeBacklogNotesValue(normalizedNotes)
+      })
+        .then(function () {
+          backlogNotes = normalizedNotes;
+          setLocalNote(getBacklogSourceKey(currentYear), encodeBacklogNotesValue(backlogNotes));
+          saveBacklogNotesToLocalStorage(currentYear, backlogNotes);
+          isBusy = false;
+          addBacklogNoteButton.disabled = false;
+          renderBacklogNotes();
+          setStatus(successMessage || "Note saved.", "success");
+        })
+        .catch(function (error) {
+          backlogNotes = normalizedNotes;
+          saveBacklogNotesToLocalStorage(currentYear, backlogNotes);
+          isBusy = false;
+          addBacklogNoteButton.disabled = false;
+          renderBacklogNotes();
+          setStatus(error.message + " Saved locally.", "warning");
+        });
+    }
+
+    function editBacklogNote(noteId) {
+      if (isBusy) {
+        return;
+      }
+
+      const note = backlogNotes.find(function (item) {
+        return item.id === noteId;
+      });
+
+      if (!note) {
+        setStatus("Could not find that note.", "error");
+        return;
+      }
+
+      const nextText = window.prompt("Edit unscheduled note", note.text);
+      if (nextText === null) {
+        return;
+      }
+
+      const trimmedText = nextText.trim();
+      if (!trimmedText) {
+        setStatus("Note is empty.", "warning");
+        return;
+      }
+
+      note.text = trimmedText;
+      note.updatedAt = new Date().toISOString();
+      persistBacklogNotes("Note updated.");
+    }
+
+    function deleteBacklogNote(noteId) {
+      if (isBusy) {
+        return;
+      }
+
+      const note = backlogNotes.find(function (item) {
+        return item.id === noteId;
+      });
+
+      if (!note) {
+        setStatus("Could not find that note.", "error");
+        return;
+      }
+
+      if (!window.confirm("Delete this unscheduled note?")) {
+        return;
+      }
+
+      backlogNotes = backlogNotes.filter(function (item) {
+        return item.id !== noteId;
+      });
+
+      persistBacklogNotes("Note deleted.");
+    }
+
+    function scheduleBacklogNote(noteId) {
+      if (isBusy || !modalBg.hidden) {
+        return;
+      }
+
+      const note = backlogNotes.find(function (item) {
+        return item.id === noteId;
+      });
+
+      if (!note) {
+        setStatus("Could not find that note.", "error");
+        return;
+      }
+
+      const todayKey = getTodayDateKey();
+      selectedDateKey = todayKey;
+      selectedSourceKeys = [];
+      pendingScheduledBacklogNoteId = noteId;
+
+      modalDate.textContent = "Schedule Boss Note";
+      activityList.innerHTML = "";
+
+      addActivityRow({
+        id: createActivityId(),
+        title: note.text,
+        start: todayKey,
+        end: todayKey,
+        completed: false,
+        originalSourceKey: ""
+      });
+
+      showModalAndFocus();
+      setStatus("Choose dates, then save.", "success");
+    }
+
+    function formatBacklogTimestamp(value) {
+      if (!value) {
+        return "recently";
+      }
+
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return "recently";
+      }
+
+      return date.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric"
+      });
+    }
+
+    function renderPendingActivitiesSidebar() {
+      if (!pendingActivityList || !pendingActivityCount) {
+        return;
+      }
+
+      const pendingActivities = getPendingActivities();
+      pendingActivityCount.textContent = String(pendingActivities.length);
+      pendingActivityList.innerHTML = "";
+
+      if (pendingActivities.length === 0) {
+        const emptyMessage = document.createElement("div");
+        emptyMessage.className = "pending-activity-empty";
+        emptyMessage.textContent = "No open activities.";
+        pendingActivityList.appendChild(emptyMessage);
+        return;
+      }
+
+      pendingActivities.forEach(function (activity) {
+        const card = document.createElement("div");
+        card.className = "pending-activity-card";
+        card.title = "Open activity: " + activity.title;
+
+        const topRow = document.createElement("div");
+        topRow.className = "pending-activity-top";
+
+        const openButton = document.createElement("button");
+        openButton.type = "button";
+        openButton.className = "pending-activity-open";
+        openButton.textContent = activity.title;
+        openButton.setAttribute("aria-label", "Open activity " + activity.title);
+        openButton.addEventListener("click", function () {
+          if (isBusy || !modalBg.hidden) {
+            return;
+          }
+
+          const todayKey = getTodayDateKey();
+          const dateToOpen = dateKeyInRange(todayKey, activity.start, activity.end)
+            ? todayKey
+            : activity.start;
+
+          openModalForDate(dateToOpen);
+        });
+
+        topRow.appendChild(openButton);
+
+        const completeButton = document.createElement("button");
+        completeButton.type = "button";
+        completeButton.className = "pending-complete-btn";
+        completeButton.textContent = "Done";
+        completeButton.setAttribute("aria-label", "Mark " + activity.title + " as completed");
+        completeButton.addEventListener("click", function () {
+          markActivityCompletedFromSidebar(activity, completeButton);
+        });
+
+        topRow.appendChild(completeButton);
+        card.appendChild(topRow);
+
+        const meta = document.createElement("div");
+        meta.className = "pending-activity-meta";
+
+        const statusPill = document.createElement("span");
+        statusPill.className = "pending-pill " + activity.statusClass;
+        statusPill.textContent = activity.statusText;
+        meta.appendChild(statusPill);
+
+        const remaining = document.createElement("span");
+        remaining.className = "pending-activity-remaining";
+        remaining.textContent = activity.remainingText;
+        meta.appendChild(remaining);
+
+        card.appendChild(meta);
+
+        const dates = document.createElement("div");
+        dates.className = "pending-activity-dates";
+        dates.textContent = formatShortDateKey(activity.start) + " → " + formatShortDateKey(activity.end);
+        card.appendChild(dates);
+
+        const duration = document.createElement("div");
+        duration.className = "pending-activity-duration";
+        duration.textContent = "Total duration: " + formatActivityDuration(activity.start, activity.end);
+        card.appendChild(duration);
+
+        pendingActivityList.appendChild(card);
+      });
+    }
+
+    function markActivityCompletedFromSidebar(activity, button) {
+      if (isBusy || !activity || !activity.sourceKey) {
+        return;
+      }
+
+      const parsed = parseStoredValue(notesByDate[activity.sourceKey], activity.sourceKey);
+      if (parsed.type !== "activities") {
+        setStatus("Could not find that activity record to update.", "error");
+        return;
+      }
+
+      let didUpdate = false;
+      const updatedActivities = parsed.activities.map(function (storedActivity) {
+        const normalizedActivity = normalizeActivityDates(storedActivity, activity.sourceKey);
+
+        if (normalizedActivity.id === activity.id) {
+          didUpdate = true;
+          return {
+            id: normalizedActivity.id,
+            title: normalizedActivity.title,
+            start: normalizedActivity.start,
+            end: normalizedActivity.end,
+            completed: true
+          };
+        }
+
+        return {
+          id: normalizedActivity.id,
+          title: normalizedActivity.title,
+          start: normalizedActivity.start,
+          end: normalizedActivity.end,
+          completed: normalizedActivity.completed
+        };
+      });
+
+      if (!didUpdate) {
+        setStatus("Could not find that activity in the saved group.", "error");
+        return;
+      }
+
+      isBusy = true;
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Saving";
+      }
+
+      setStatus("Saving...");
+
+      callAppsScript("saveNote", {
+        dateKey: activity.sourceKey,
+        note: encodeActivitiesValue(updatedActivities)
+      })
+        .then(function () {
+          setLocalNote(activity.sourceKey, encodeActivitiesValue(updatedActivities));
+          isBusy = false;
+          renderCalendar(currentYear);
+          setStatus("Done.", "success");
+        })
+        .catch(function (error) {
+          isBusy = false;
+          if (button) {
+            button.disabled = false;
+            button.textContent = "Done";
+          }
+          setStatus(error.message, "error");
+        });
+    }
+
+    function getPendingActivities() {
+      const todayKey = getTodayDateKey();
+      const unique = {};
+      const pendingActivities = [];
+
+      getAllActivityRecords().forEach(function (record) {
+        record.activities.forEach(function (activity) {
+          const normalizedActivity = normalizeActivityDates(activity, record.sourceKey);
+
+          if (!normalizedActivity.title || !normalizedActivity.start || !normalizedActivity.end) {
+            return;
+          }
+
+          if (compareDateKeys(normalizedActivity.end, normalizedActivity.start) < 0) {
+            return;
+          }
+
+          if (normalizedActivity.completed) {
+            return;
+          }
+
+          if (compareDateKeys(normalizedActivity.end, todayKey) < 0) {
+            return;
+          }
+
+          const uniqueKey = record.sourceKey + "::" + normalizedActivity.id;
+          if (unique[uniqueKey]) {
+            return;
+          }
+
+          unique[uniqueKey] = true;
+
+          const daysLeft = getDaysUntilDate(normalizedActivity.end);
+          const isUpcoming = compareDateKeys(normalizedActivity.start, todayKey) > 0;
+          const isDueToday = daysLeft === 0;
+
+          pendingActivities.push({
+            sourceKey: record.sourceKey,
+            id: normalizedActivity.id,
+            title: normalizedActivity.title,
+            start: normalizedActivity.start,
+            end: normalizedActivity.end,
+            daysLeft: daysLeft,
+            statusText: isDueToday ? "Due today" : (isUpcoming ? "Upcoming" : "Active"),
+            statusClass: isDueToday ? "due-today" : (isUpcoming ? "upcoming" : "active"),
+            remainingText: formatDaysLeft(daysLeft)
+          });
+        });
+      });
+
+      pendingActivities.sort(function (a, b) {
+        const endComparison = compareDateKeys(a.end, b.end);
+        if (endComparison !== 0) {
+          return endComparison;
+        }
+
+        const startComparison = compareDateKeys(a.start, b.start);
+        if (startComparison !== 0) {
+          return startComparison;
+        }
+
+        return a.title.localeCompare(b.title);
+      });
+
+      return pendingActivities;
+    }
+
+    function getTodayDateKey() {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return dateToDateKey(today);
+    }
+
+    function getDaysUntilDate(dateKey) {
+      if (!isValidDateKey(dateKey)) {
+        return 0;
+      }
+
+      const today = dateKeyToDate(getTodayDateKey());
+      const target = dateKeyToDate(dateKey);
+      const difference = target.getTime() - today.getTime();
+
+      return Math.max(0, Math.ceil(difference / 86400000));
+    }
+
+    function formatDaysLeft(dayCount) {
+      if (dayCount === 0) {
+        return "Due today";
+      }
+
+      return String(dayCount) + " " + (dayCount === 1 ? "day" : "days") + " left";
+    }
+
+    function formatShortDateKey(dateKey) {
+      if (!isValidDateKey(dateKey)) {
+        return dateKey || "";
+      }
+
+      const date = dateKeyToDate(dateKey);
+      return monthNames[date.getMonth()].slice(0, 3) + " " + String(date.getDate()) + ", " + String(date.getFullYear());
+    }
+
+
     function getThailandHolidaysForDate(dateKey) {
       if (!isValidDateKey(dateKey)) {
         return [];
@@ -2300,12 +3338,11 @@
           setStatus("Search cleared.", "success");
         } else if (matchedActivities > 0) {
           setStatus(
-            "Search matched " + matchedActivities + " activity instance" + (matchedActivities === 1 ? "" : "s") +
-            " across " + matchedDays + " day" + (matchedDays === 1 ? "" : "s") + ".",
+            "Matches: " + matchedActivities + ". Days: " + matchedDays + ".",
             "success"
           );
         } else {
-          setStatus("No activities matched the search term.", "warning");
+          setStatus("No matches.", "warning");
         }
       }
     }
