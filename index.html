@@ -32,6 +32,10 @@
       --shadow-soft: 0 2px 10px rgba(15, 23, 42, 0.05);
       --radius: 14px;
       --radius-sm: 10px;
+      --sidebar-width: 430px;
+      --layout-gap: 18px;
+      --page-pad: 20px;
+      --right-pane-offset: calc(var(--sidebar-width) + var(--layout-gap) + var(--page-pad));
     }
 
     * {
@@ -69,6 +73,8 @@
       position: sticky;
       top: 0;
       z-index: 50;
+      margin-left: var(--right-pane-offset);
+      width: calc(100% - var(--right-pane-offset));
       background: rgba(255, 255, 255, 0.94);
       border-bottom: 1px solid var(--border);
       backdrop-filter: blur(14px);
@@ -84,11 +90,12 @@
     }
 
     .header-inner {
-      max-width: 1840px;
-      margin: 0 auto;
-      padding: 10px 20px;
+      max-width: none;
+      margin: 0;
+      padding: 10px 64px 10px 0;
       display: grid;
       gap: 10px;
+      position: relative;
     }
 
     .header-top {
@@ -101,6 +108,86 @@
     .brand {
       min-width: 0;
       padding-left: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .ribbon-toggle {
+      position: absolute;
+      top: 8px;
+      right: 20px;
+      z-index: 3;
+      width: 36px;
+      height: 36px;
+      min-height: 36px;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 0;
+      line-height: 1;
+      cursor: pointer;
+      white-space: nowrap;
+      box-shadow: var(--shadow-soft);
+      transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
+    }
+
+    .ribbon-toggle::before,
+    .ribbon-toggle::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 11px;
+      height: 2px;
+      border-radius: 999px;
+      background: currentColor;
+      transition: transform 0.18s ease;
+    }
+
+    header.header-collapsed .ribbon-toggle::before {
+      transform: translate(-8px, -50%) rotate(45deg);
+    }
+
+    header.header-collapsed .ribbon-toggle::after {
+      transform: translate(-2px, -50%) rotate(-45deg);
+    }
+
+    header:not(.header-collapsed) .ribbon-toggle::before {
+      transform: translate(-8px, -50%) rotate(-45deg);
+    }
+
+    header:not(.header-collapsed) .ribbon-toggle::after {
+      transform: translate(-2px, -50%) rotate(45deg);
+    }
+
+    .ribbon-toggle:hover {
+      background: var(--text);
+      border-color: var(--text);
+      color: #ffffff;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.14);
+    }
+
+    header.header-collapsed .controls,
+    header.header-collapsed .header-meta {
+      display: none;
+    }
+
+    header.header-collapsed .header-inner {
+      padding-top: 8px;
+      padding-bottom: 8px;
+      gap: 0;
+    }
+
+    header.header-collapsed .ribbon-toggle {
+      top: 8px;
+    }
+
+    header.header-collapsed .header-top {
+      grid-template-columns: 1fr;
     }
 
     header h1 {
@@ -286,28 +373,29 @@
     .legend-swatch.holiday-swatch { background: var(--holiday); }
 
     main {
-      max-width: 1840px;
-      margin: 0 auto;
-      padding: 20px;
+      max-width: none;
+      margin: 0;
+      padding: 20px 32px 20px var(--right-pane-offset);
     }
 
     .planner-layout {
-      display: grid;
-      grid-template-columns: 320px minmax(0, 1fr);
-      gap: 18px;
-      align-items: start;
+      display: block;
     }
 
     .activity-sidebar {
-      position: sticky;
-      top: 92px;
-      max-height: calc(100vh - 112px);
+      position: fixed;
+      top: var(--page-pad);
+      left: var(--page-pad);
+      bottom: var(--page-pad);
+      width: var(--sidebar-width);
+      max-height: none;
       overflow-y: auto;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 14px;
+      padding: 18px;
       box-shadow: var(--shadow-soft);
+      z-index: 60;
     }
 
     .activity-sidebar-header {
@@ -501,7 +589,7 @@
 
     .backlog-note-actions {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: 1fr auto;
       gap: 6px;
     }
 
@@ -581,8 +669,8 @@
     }
 
     .day {
-      min-height: 82px;
-      padding: 22px 4px 22px;
+      min-height: 130px;
+      padding: 26px 6px 26px;
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
       background: var(--surface);
@@ -675,7 +763,7 @@
       overflow: hidden;
       text-overflow: ellipsis;
       text-align: left;
-      z-index: 5;
+      z-index: 6;
     }
 
     .day.search-dim {
@@ -699,7 +787,7 @@
       color: var(--muted);
       font-size: 12px;
       font-weight: 700;
-      z-index: 5;
+      z-index: 7;
     }
 
     .today .date-number {
@@ -709,8 +797,8 @@
 
     .activity-bar {
       position: absolute;
-      left: -1px;
-      right: -1px;
+      left: 0;
+      right: 0;
       height: 14px;
       padding: 0 7px;
       color: #ffffff;
@@ -734,21 +822,21 @@
     .bar-color-5 { background: #0891b2; }
 
     .activity-bar.segment-start {
-      left: 4px;
-      border-top-left-radius: 999px;
-      border-bottom-left-radius: 999px;
+      left: 0;
+      border-top-left-radius: 0;
+      border-bottom-left-radius: 0;
     }
 
     .activity-bar.segment-end {
-      right: 4px;
-      border-top-right-radius: 999px;
-      border-bottom-right-radius: 999px;
+      right: 0;
+      border-top-right-radius: 0;
+      border-bottom-right-radius: 0;
     }
 
     .activity-bar.segment-single {
-      left: 4px;
-      right: 4px;
-      border-radius: 999px;
+      left: 0;
+      right: 0;
+      border-radius: 0;
     }
 
     .activity-bar.completed-activity-bar {
@@ -1017,8 +1105,8 @@
     }
 
     @media (max-width: 1280px) {
-      .planner-layout {
-        grid-template-columns: 300px minmax(0, 1fr);
+      :root {
+        --sidebar-width: 400px;
       }
 
       .activity-row {
@@ -1027,12 +1115,32 @@
     }
 
     @media (max-width: 1160px) {
+      header {
+        margin-left: 0;
+        width: 100%;
+      }
+
+      .header-inner {
+        max-width: 1840px;
+        margin: 0 auto;
+        padding: 10px 64px 10px 20px;
+      }
+
+      main {
+        max-width: 1840px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
       .planner-layout {
+        display: grid;
         grid-template-columns: 1fr;
+        gap: 18px;
       }
 
       .activity-sidebar {
         position: static;
+        width: auto;
         max-height: none;
       }
     }
@@ -1071,7 +1179,7 @@
       }
 
       .day {
-        min-height: 76px;
+        min-height: 110px;
       }
 
       .activity-row {
@@ -1105,7 +1213,11 @@
 
     @media (max-width: 620px) {
       .header-inner {
-        padding: 10px 12px;
+        padding: 10px 56px 10px 12px;
+      }
+
+      .ribbon-toggle {
+        right: 12px;
       }
 
       .controls {
@@ -1132,7 +1244,7 @@
       }
 
       .day {
-        min-height: 70px;
+        min-height: 100px;
         padding-left: 2px;
         padding-right: 2px;
       }
@@ -1140,6 +1252,287 @@
       .activity-bar,
       .more-indicator {
         font-size: 8px;
+      }
+    }
+
+
+    /* Fully hide the top bar when collapsed; keep only the round toggle visible. */
+    header.header-collapsed {
+      height: 0;
+      min-height: 0;
+      margin-left: 0;
+      width: 100%;
+      overflow: visible;
+      background: transparent;
+      border-bottom: 0;
+      box-shadow: none;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      pointer-events: none;
+    }
+
+    header.header-collapsed .header-inner {
+      height: 0;
+      min-height: 0;
+      margin: 0;
+      padding: 0;
+      overflow: visible;
+    }
+
+    header.header-collapsed .header-top,
+    header.header-collapsed .brand {
+      display: block;
+      height: 0;
+      min-height: 0;
+      overflow: visible;
+    }
+
+    header.header-collapsed h1,
+    header.header-collapsed .subtitle,
+    header.header-collapsed .controls,
+    header.header-collapsed .header-meta {
+      display: none !important;
+    }
+
+    header.header-collapsed .ribbon-toggle {
+      position: fixed;
+      top: 7px;
+      right: 20px;
+      z-index: 1000;
+      width: 32px;
+      height: 32px;
+      min-height: 32px;
+      pointer-events: auto;
+    }
+
+    @media (max-width: 620px) {
+      header.header-collapsed .ribbon-toggle {
+        top: 7px;
+        right: 20px;
+      }
+    }
+
+
+
+    /* Cleaner expanded toolbar layout. Keeps the collapsed state as symbol-only. */
+    header:not(.header-collapsed) .header-inner {
+      padding: 14px 72px 14px 20px;
+      gap: 12px;
+    }
+
+    header:not(.header-collapsed) .header-top {
+      grid-template-columns: 150px minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    header:not(.header-collapsed) .brand {
+      min-height: 40px;
+      align-items: center;
+    }
+
+    header:not(.header-collapsed) .controls {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(72px, 1fr));
+      gap: 8px;
+      align-items: center;
+      justify-content: stretch;
+      width: 100%;
+    }
+
+    header:not(.header-collapsed) .controls button,
+    header:not(.header-collapsed) .controls input {
+      width: 100%;
+      min-width: 0;
+    }
+
+    header:not(.header-collapsed) .controls input[type="number"] {
+      width: 100%;
+    }
+
+    header:not(.header-collapsed) #printButton {
+      grid-column: 1 / 2;
+      grid-row: 2;
+    }
+
+    header:not(.header-collapsed) .search-input {
+      grid-column: 2 / 6;
+      grid-row: 2;
+      width: 100%;
+      min-width: 0;
+    }
+
+    header:not(.header-collapsed) #clearSearchButton {
+      grid-column: 6 / 7;
+      grid-row: 2;
+    }
+
+    header:not(.header-collapsed) .header-meta {
+      grid-template-columns: minmax(220px, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+    }
+
+    header:not(.header-collapsed) .status {
+      width: 100%;
+      min-height: 36px;
+      padding: 7px 14px;
+    }
+
+    header:not(.header-collapsed) .legend {
+      justify-content: flex-end;
+      gap: 7px;
+    }
+
+    header:not(.header-collapsed) .legend-item {
+      min-height: 30px;
+      padding: 5px 10px;
+      font-size: 13px;
+    }
+
+    @media (max-width: 1160px) {
+      header:not(.header-collapsed) .header-top {
+        grid-template-columns: 130px minmax(0, 1fr);
+      }
+    }
+
+    @media (max-width: 820px) {
+      header:not(.header-collapsed) .header-inner {
+        padding: 12px 64px 12px 14px;
+      }
+
+      header:not(.header-collapsed) .header-top {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+
+      header:not(.header-collapsed) .controls {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      header:not(.header-collapsed) #printButton,
+      header:not(.header-collapsed) .search-input,
+      header:not(.header-collapsed) #clearSearchButton {
+        grid-column: auto;
+        grid-row: auto;
+      }
+
+      header:not(.header-collapsed) .search-input {
+        grid-column: 1 / -1;
+      }
+
+      header:not(.header-collapsed) .header-meta {
+        grid-template-columns: 1fr;
+      }
+
+      header:not(.header-collapsed) .legend {
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 520px) {
+      header:not(.header-collapsed) .controls {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+
+    /* Compact expanded toolbar. Collapsed mode remains symbol-only. */
+    header:not(.header-collapsed) .header-inner {
+      padding: 8px 60px 8px 14px;
+      gap: 6px;
+    }
+
+    header:not(.header-collapsed) .header-top {
+      grid-template-columns: 110px minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    header:not(.header-collapsed) .brand {
+      min-height: 30px;
+      align-items: center;
+    }
+
+    header:not(.header-collapsed) h1 {
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    header:not(.header-collapsed) .ribbon-toggle {
+      top: 7px;
+      right: 20px;
+      width: 32px;
+      height: 32px;
+      min-height: 32px;
+    }
+
+    header:not(.header-collapsed) .controls {
+      grid-template-columns: repeat(6, minmax(58px, 1fr));
+      gap: 6px;
+      align-items: center;
+    }
+
+    header:not(.header-collapsed) .controls button,
+    header:not(.header-collapsed) .controls input {
+      min-height: 30px;
+      padding: 4px 9px;
+      border-radius: 10px;
+      font-size: 12px;
+    }
+
+    header:not(.header-collapsed) .controls input[type="number"] {
+      min-height: 30px;
+      font-size: 12px;
+    }
+
+    header:not(.header-collapsed) .search-input {
+      padding-left: 10px !important;
+    }
+
+    header:not(.header-collapsed) .header-meta {
+      grid-template-columns: minmax(180px, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    header:not(.header-collapsed) .status {
+      min-height: 26px;
+      padding: 3px 10px;
+      border-radius: 10px;
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    header:not(.header-collapsed) .legend {
+      gap: 5px;
+      font-size: 11px;
+    }
+
+    header:not(.header-collapsed) .legend-item {
+      min-height: 24px;
+      padding: 3px 8px;
+      gap: 5px;
+      font-size: 11px;
+    }
+
+    header:not(.header-collapsed) .legend-swatch {
+      width: 7px;
+      height: 7px;
+    }
+
+    @media (max-width: 820px) {
+      header:not(.header-collapsed) .header-inner {
+        padding: 8px 56px 8px 12px;
+        gap: 6px;
+      }
+
+      header:not(.header-collapsed) .header-top {
+        gap: 6px;
+      }
+
+      header:not(.header-collapsed) .controls {
+        gap: 5px;
       }
     }
 
@@ -1182,7 +1575,7 @@
       }
 
       .day {
-        min-height: 58px;
+        min-height: 72px;
       }
 
       .more-indicator,
@@ -1197,15 +1590,16 @@
 </head>
 
 <body>
-  <header>
+  <header id="plannerHeader" class="header-collapsed">
     <div class="header-inner">
       <div class="header-top">
         <div class="brand">
           <h1>Planner</h1>
+          <button type="button" id="plannerToolsToggle" class="ribbon-toggle" aria-label="Show tools" aria-expanded="false" aria-controls="plannerControls plannerMeta"></button>
           <p class="subtitle"></p>
         </div>
 
-        <div class="controls" aria-label="Calendar controls">
+        <div class="controls" id="plannerControls" aria-label="Calendar controls">
           <button type="button" id="prevYearButton" aria-label="Previous year">Prev</button>
           <input type="number" id="yearInput" min="1900" max="9999" aria-label="Year" />
           <button type="button" id="nextYearButton" aria-label="Next year">Next</button>
@@ -1218,7 +1612,7 @@
         </div>
       </div>
 
-      <div class="header-meta">
+      <div class="header-meta" id="plannerMeta">
         <div id="status" class="status" role="status" aria-live="polite">Ready</div>
 
         <div class="legend" aria-label="Calendar legend">
@@ -1359,6 +1753,9 @@
     const cancelButton = document.getElementById("cancelButton");
     const activitySearchInput = document.getElementById("activitySearchInput");
     const clearSearchButton = document.getElementById("clearSearchButton");
+    const plannerHeader = document.getElementById("plannerHeader");
+    const plannerToolsToggle = document.getElementById("plannerToolsToggle");
+    const HEADER_TOOLS_STORAGE_KEY = "fullYearPlannerHeaderCollapsed";
 
     let currentYear = new Date().getFullYear();
     let selectedDateKey = "";
@@ -1377,6 +1774,12 @@
     let rangeStartDateKey = "";
 
     yearInput.value = currentYear;
+    initializeHeaderTools();
+
+    plannerToolsToggle.addEventListener("click", function () {
+      const shouldCollapse = !plannerHeader.classList.contains("header-collapsed");
+      setHeaderToolsCollapsed(shouldCollapse, true);
+    });
 
     document.getElementById("prevYearButton").addEventListener("click", function () {
       changeYear(-1);
@@ -1490,6 +1893,37 @@
         }
       }
     });
+
+    function initializeHeaderTools() {
+      let shouldCollapse = true;
+
+      try {
+        const savedValue = window.localStorage.getItem(HEADER_TOOLS_STORAGE_KEY);
+        shouldCollapse = savedValue === null ? true : savedValue === "true";
+      } catch (error) {
+        shouldCollapse = true;
+      }
+
+      setHeaderToolsCollapsed(shouldCollapse, false);
+    }
+
+    function setHeaderToolsCollapsed(shouldCollapse, shouldPersist) {
+      plannerHeader.classList.toggle("header-collapsed", shouldCollapse);
+      plannerToolsToggle.textContent = "";
+      plannerToolsToggle.setAttribute("aria-label", shouldCollapse ? "Show tools" : "Hide tools");
+      plannerToolsToggle.setAttribute("title", shouldCollapse ? "Show tools" : "Hide tools");
+      plannerToolsToggle.setAttribute("aria-expanded", shouldCollapse ? "false" : "true");
+
+      if (!shouldPersist) {
+        return;
+      }
+
+      try {
+        window.localStorage.setItem(HEADER_TOOLS_STORAGE_KEY, shouldCollapse ? "true" : "false");
+      } catch (error) {
+        // The UI still works if browser storage is unavailable.
+      }
+    }
 
     function loadNotesForYear(year, forceReload) {
       const yearsToLoad = [year - 1, year, year + 1];
@@ -1831,7 +2265,9 @@
         }
       }
 
-      bar.style.top = String(21 + stackIndex * 14) + "px";
+      const firstBarTop = 34;
+      const barGap = 15;
+      bar.style.top = String(firstBarTop + stackIndex * barGap) + "px";
 
       const durationText = formatActivityDuration(activityInfo.start, activityInfo.end);
       const durationShort = formatActivityDurationShort(activityInfo.start, activityInfo.end);
@@ -2005,6 +2441,11 @@
       row.dataset.originalSourceKey = activity.originalSourceKey || "";
       row.dataset.completed = activity.completed ? "true" : "false";
 
+      const hasStartValue = Object.prototype.hasOwnProperty.call(activity, "start");
+      const hasEndValue = Object.prototype.hasOwnProperty.call(activity, "end");
+      const initialStartValue = hasStartValue ? activity.start : selectedDateKey;
+      const initialEndValue = hasEndValue ? activity.end : initialStartValue;
+
       const number = document.createElement("div");
       number.className = "activity-number";
       row.appendChild(number);
@@ -2066,7 +2507,7 @@
       const startInput = document.createElement("input");
       startInput.type = "date";
       startInput.className = "activity-start-input";
-      startInput.value = activity.start || selectedDateKey;
+      startInput.value = initialStartValue || "";
       startGroup.appendChild(startInput);
 
       row.appendChild(startGroup);
@@ -2081,7 +2522,7 @@
       const endInput = document.createElement("input");
       endInput.type = "date";
       endInput.className = "activity-end-input";
-      endInput.value = activity.end || selectedDateKey;
+      endInput.value = initialEndValue || "";
       endInput.min = startInput.value;
       endGroup.appendChild(endInput);
 
@@ -2289,33 +2730,41 @@
         }));
       }
 
+      function applyActivitySaveLocally() {
+        sourceKeysToSave.forEach(function (sourceKey) {
+          const activities = groupedBySourceKey[sourceKey];
+
+          if (activities.length > 0) {
+            setLocalNote(sourceKey, encodeActivitiesValue(activities));
+          } else {
+            removeLocalNote(sourceKey);
+          }
+        });
+
+        if (scheduledBacklogNoteId) {
+          backlogNotes = updatedBacklogNotesAfterScheduling;
+          setLocalNote(getBacklogSourceKey(currentYear), encodeBacklogNotesValue(backlogNotes));
+          saveBacklogNotesToLocalStorage(currentYear, backlogNotes);
+          renderBacklogNotes();
+          pendingScheduledBacklogNoteId = "";
+        }
+      }
+
       Promise.all(tasks)
         .then(function () {
-          sourceKeysToSave.forEach(function (sourceKey) {
-            const activities = groupedBySourceKey[sourceKey];
-
-            if (activities.length > 0) {
-              setLocalNote(sourceKey, encodeActivitiesValue(activities));
-            } else {
-              removeLocalNote(sourceKey);
-            }
-          });
-
-          if (scheduledBacklogNoteId) {
-            backlogNotes = updatedBacklogNotesAfterScheduling;
-            setLocalNote(getBacklogSourceKey(currentYear), encodeBacklogNotesValue(backlogNotes));
-            saveBacklogNotesToLocalStorage(currentYear, backlogNotes);
-            pendingScheduledBacklogNoteId = "";
-          }
-
+          applyActivitySaveLocally();
           closeModal();
           renderCalendar(currentYear);
           setStatus(scheduledBacklogNoteId ? "Scheduled." : "Saved.", "success");
         })
         .catch(function (error) {
-          isBusy = false;
-          setModalBusy(false);
-          setStatus(error.message, "error");
+          applyActivitySaveLocally();
+          closeModal();
+          renderCalendar(currentYear);
+          setStatus(
+            (scheduledBacklogNoteId ? "Scheduled locally, but sync failed: " : "Saved locally, but sync failed: ") + error.message,
+            "warning"
+          );
         });
     }
 
@@ -2806,30 +3255,18 @@
         textBlock.textContent = note.text;
         card.appendChild(textBlock);
 
-        const meta = document.createElement("div");
-        meta.className = "backlog-note-meta";
-        meta.textContent = "Added " + formatBacklogTimestamp(note.createdAt);
-        card.appendChild(meta);
-
         const actions = document.createElement("div");
         actions.className = "backlog-note-actions";
 
         const scheduleButton = document.createElement("button");
         scheduleButton.type = "button";
         scheduleButton.className = "backlog-schedule-btn";
-        scheduleButton.textContent = "Schedule";
+        scheduleButton.textContent = "Schedule / Edit";
+        scheduleButton.title = "Schedule this note. You can edit the title before saving.";
         scheduleButton.addEventListener("click", function () {
           scheduleBacklogNote(note.id);
         });
         actions.appendChild(scheduleButton);
-
-        const editButton = document.createElement("button");
-        editButton.type = "button";
-        editButton.textContent = "Edit";
-        editButton.addEventListener("click", function () {
-          editBacklogNote(note.id);
-        });
-        actions.appendChild(editButton);
 
         const deleteButton = document.createElement("button");
         deleteButton.type = "button";
@@ -2952,20 +3389,20 @@
       selectedSourceKeys = [];
       pendingScheduledBacklogNoteId = noteId;
 
-      modalDate.textContent = "Schedule Boss Note";
+      modalDate.textContent = "Schedule Note";
       activityList.innerHTML = "";
 
       addActivityRow({
         id: createActivityId(),
         title: note.text,
-        start: todayKey,
-        end: todayKey,
+        start: "",
+        end: "",
         completed: false,
         originalSourceKey: ""
       });
 
       showModalAndFocus();
-      setStatus("Choose dates, then save.", "success");
+      setStatus("Choose start and end dates, then save. The note will become an activity.", "success");
     }
 
     function formatBacklogTimestamp(value) {
