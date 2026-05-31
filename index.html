@@ -1790,7 +1790,6 @@
     const clearSearchButton = document.getElementById("clearSearchButton");
     const plannerHeader = document.getElementById("plannerHeader");
     const plannerToolsToggle = document.getElementById("plannerToolsToggle");
-    const HEADER_TOOLS_STORAGE_KEY = "fullYearPlannerHeaderCollapsed";
 
     let currentYear = new Date().getFullYear();
     let selectedDateKey = "";
@@ -1963,16 +1962,7 @@
     });
 
     function initializeHeaderTools() {
-      let shouldCollapse = true;
-
-      try {
-        const savedValue = window.localStorage.getItem(HEADER_TOOLS_STORAGE_KEY);
-        shouldCollapse = savedValue === null ? true : savedValue === "true";
-      } catch (error) {
-        shouldCollapse = true;
-      }
-
-      setHeaderToolsCollapsed(shouldCollapse, false);
+      setHeaderToolsCollapsed(true, false);
     }
 
     function setHeaderToolsCollapsed(shouldCollapse, shouldPersist) {
@@ -1981,61 +1971,17 @@
       plannerToolsToggle.setAttribute("aria-label", shouldCollapse ? "Show tools" : "Hide tools");
       plannerToolsToggle.setAttribute("title", shouldCollapse ? "Show tools" : "Hide tools");
       plannerToolsToggle.setAttribute("aria-expanded", shouldCollapse ? "false" : "true");
-
-      if (!shouldPersist) {
-        return;
-      }
-
-      try {
-        window.localStorage.setItem(HEADER_TOOLS_STORAGE_KEY, shouldCollapse ? "true" : "false");
-      } catch (error) {
-        // The UI still works if browser storage is unavailable.
-      }
     }
 
     function loadNotesForYear(year, forceReload) {
-      const yearsToLoad = [year - 1, year, year + 1];
-      const hasAllMemoryYears = yearsToLoad.every(function (yearToLoad) {
-        return !forceReload && Object.prototype.hasOwnProperty.call(notesCacheByYear, yearToLoad);
-      });
-
-      if (hasAllMemoryYears) {
-        notesByDate = mergeCachedNotes(yearsToLoad);
-        activityRecordsCache = null;
-        renderCalendar(year);
-        setStatus("Loaded.", "success");
-        return Promise.resolve(notesByDate);
-      }
-
-      if (!forceReload) {
-        hydrateYearCacheFromLocalStorage(yearsToLoad);
-      }
-
-      const hasUsableLocalCache = yearsToLoad.every(function (yearToLoad) {
-        return !forceReload && Object.prototype.hasOwnProperty.call(notesCacheByYear, yearToLoad);
-      });
-
-      if (hasUsableLocalCache) {
-        notesByDate = mergeCachedNotes(yearsToLoad);
-        activityRecordsCache = null;
-        renderCalendar(year);
-        setStatus("Loaded cached data. Syncing...", "success");
-
-        refreshYearsFromBackend(yearsToLoad, year, forceReload).catch(function (error) {
-          setStatus("Using cached data. Sync failed: " + error.message, "warning");
-        });
-
-        return Promise.resolve(notesByDate);
-      }
-
-      calendar.innerHTML = '<div class="loading-message">Loading notes...</div>';
-      setStatus("Loading...");
-
-      return refreshYearsFromBackend(yearsToLoad, year, forceReload);
+      const yearsToLoad = getLoadYearsForPlanner(year);
+      calendar.innerHTML = '<div class="loading-message">Loading notes from Google Sheet...</div>';
+      setStatus("Loading Google Sheet...");
+      return refreshYearsFromBackend(yearsToLoad, year, true);
     }
 
     function refreshYearsFromBackend(yearsToLoad, displayYear, forceReload) {
-      return loadMultipleYearNotes(yearsToLoad, forceReload)
+      return loadMultipleYearNotes(yearsToLoad, true)
         .then(function () {
           notesByDate = mergeCachedNotes(yearsToLoad);
           activityRecordsCache = null;
@@ -2044,7 +1990,7 @@
           const currentYearCount = Object.keys(notesCacheByYear[displayYear] || {}).length;
           const mergedCount = Object.keys(notesByDate).length;
           setStatus(
-            "Loaded. Records: " + currentYearCount +
+            "Loaded from Google Sheet. Records: " + currentYearCount +
             ". Total: " + mergedCount + ".",
             "success"
           );
@@ -2052,22 +1998,19 @@
           return notesByDate;
         })
         .catch(function (error) {
-          notesByDate = mergeCachedNotes(yearsToLoad);
+          notesByDate = {};
+          yearsToLoad.forEach(function (yearToLoad) {
+            notesCacheByYear[yearToLoad] = {};
+          });
           activityRecordsCache = null;
           renderCalendar(displayYear);
-          setStatus(error.message, "error");
+          setStatus("Could not load Google Sheet: " + error.message, "error");
           return null;
         });
     }
 
     function loadMultipleYearNotes(yearsToLoad, forceReload) {
-      const yearsNeedingLoad = yearsToLoad.filter(function (yearToLoad) {
-        return forceReload || !Object.prototype.hasOwnProperty.call(notesCacheByYear, yearToLoad);
-      });
-
-      if (yearsNeedingLoad.length === 0) {
-        return Promise.resolve(notesCacheByYear);
-      }
+      const yearsNeedingLoad = yearsToLoad.slice();
 
       const applyYearData = function (dataByYear) {
         yearsNeedingLoad.forEach(function (yearToLoad) {
@@ -2075,7 +2018,6 @@
           const yearData = rawYearData && typeof rawYearData === "object" && !Array.isArray(rawYearData) ? rawYearData : {};
           notesCacheByYear[yearToLoad] = yearData;
           authoritativeSheetYears[String(yearToLoad)] = true;
-          saveYearCacheToLocalStorage(yearToLoad, yearData);
         });
 
         return notesCacheByYear;
@@ -2084,28 +2026,17 @@
       const loadFromAppsScript = function () {
         return callAppsScript("getNotesForYears", {
           years: JSON.stringify(yearsNeedingLoad),
-          fresh: forceReload ? "1" : "0"
-        })
-          .then(function (response) {
-            return applyYearData(response.data || {});
-          })
-          .catch(function () {
-            return Promise.all(yearsNeedingLoad.map(function (yearToLoad) {
-              return loadSingleYearNotes(yearToLoad, true);
-            }));
-          });
+          fresh: "1"
+        }).then(function (response) {
+          return applyYearData(response.data || {});
+        });
       };
 
-      if (forceReload) {
-        return loadFromAppsScript()
-          .catch(function () {
-            return loadPublishedNoteDataCsv(yearsNeedingLoad, true).then(applyYearData);
-          });
+      if (APPS_SCRIPT_URL && APPS_SCRIPT_URL.indexOf("https://script.google.com/macros/") === 0) {
+        return loadFromAppsScript();
       }
 
-      return loadPublishedNoteDataCsv(yearsNeedingLoad, false)
-        .then(applyYearData)
-        .catch(loadFromAppsScript);
+      return loadPublishedNoteDataCsv(yearsNeedingLoad, true).then(applyYearData);
     }
 
     function loadPublishedNoteDataCsv(yearsToLoad, forceReload) {
@@ -2244,66 +2175,9 @@
     }
 
     function loadSingleYearNotes(year, forceReload) {
-      if (!forceReload && Object.prototype.hasOwnProperty.call(notesCacheByYear, year)) {
-        return Promise.resolve(notesCacheByYear[year]);
-      }
-
-      return callAppsScript("getNotesForYear", {
-          year: year,
-          fresh: forceReload ? "1" : "0"
-        })
-        .then(function (response) {
-          notesCacheByYear[year] = response.data || {};
-          authoritativeSheetYears[String(year)] = true;
-          saveYearCacheToLocalStorage(year, notesCacheByYear[year]);
-          return notesCacheByYear[year];
-        });
-    }
-
-    function hydrateYearCacheFromLocalStorage(yearsToLoad) {
-      yearsToLoad.forEach(function (yearToLoad) {
-        if (Object.prototype.hasOwnProperty.call(notesCacheByYear, yearToLoad)) {
-          return;
-        }
-
-        const cachedYear = loadYearCacheFromLocalStorage(yearToLoad);
-        if (cachedYear) {
-          notesCacheByYear[yearToLoad] = cachedYear;
-        }
+      return loadMultipleYearNotes([year], true).then(function () {
+        return notesCacheByYear[year] || {};
       });
-    }
-
-    function getYearCacheStorageKey(year) {
-      return YEAR_CACHE_PREFIX + ":" + String(year);
-    }
-
-    function loadYearCacheFromLocalStorage(year) {
-      try {
-        const raw = window.localStorage.getItem(getYearCacheStorageKey(year));
-        if (!raw) {
-          return null;
-        }
-
-        const parsed = JSON.parse(raw);
-        if (!parsed || typeof parsed.data !== "object" || Array.isArray(parsed.data)) {
-          return null;
-        }
-
-        return parsed.data;
-      } catch (error) {
-        return null;
-      }
-    }
-
-    function saveYearCacheToLocalStorage(year, data) {
-      try {
-        window.localStorage.setItem(getYearCacheStorageKey(year), JSON.stringify({
-          savedAt: new Date().toISOString(),
-          data: data || {}
-        }));
-      } catch (error) {
-        // Local storage only improves warm-load speed. The app still works without it.
-      }
     }
 
     function mergeCachedNotes(years) {
@@ -3159,10 +3033,16 @@
       });
 
       if (scheduledBacklogNoteId) {
-        notesToSave.push({
-          dateKey: getBacklogSourceKey(currentYear),
-          note: encodeBacklogNotesValue(updatedBacklogNotesAfterScheduling)
-        });
+        const backlogSourceKey = getBacklogSourceKey(currentYear);
+
+        if (updatedBacklogNotesAfterScheduling.length > 0) {
+          notesToSave.push({
+            dateKey: backlogSourceKey,
+            note: encodeBacklogNotesValue(updatedBacklogNotesAfterScheduling)
+          });
+        } else {
+          dateKeysToDelete.push(backlogSourceKey);
+        }
       }
 
       const syncChanges = function () {
@@ -3200,8 +3080,11 @@
 
         if (scheduledBacklogNoteId) {
           backlogNotes = updatedBacklogNotesAfterScheduling;
-          setLocalNote(getBacklogSourceKey(currentYear), encodeBacklogNotesValue(backlogNotes));
-          saveBacklogNotesToLocalStorage(currentYear, backlogNotes);
+          if (backlogNotes.length > 0) {
+            setLocalNote(getBacklogSourceKey(currentYear), encodeBacklogNotesValue(backlogNotes));
+          } else {
+            removeLocalNote(getBacklogSourceKey(currentYear));
+          }
           renderBacklogNotes();
           pendingScheduledBacklogNoteId = "";
         }
@@ -3212,16 +3095,12 @@
           applyActivitySaveLocally();
           closeModal();
           renderCalendar(currentYear);
-          setStatus(scheduledBacklogNoteId ? "Scheduled." : "Saved.", "success");
+          setStatus(scheduledBacklogNoteId ? "Scheduled in Google Sheet." : "Saved to Google Sheet.", "success");
         })
         .catch(function (error) {
-          applyActivitySaveLocally();
-          closeModal();
-          renderCalendar(currentYear);
-          setStatus(
-            (scheduledBacklogNoteId ? "Scheduled locally, but sync failed: " : "Saved locally, but sync failed: ") + error.message,
-            "warning"
-          );
+          isBusy = false;
+          setModalBusy(false);
+          setStatus("Google Sheet save failed: " + error.message, "error");
         });
     }
 
@@ -3597,6 +3476,18 @@
       return Math.abs(hash) % 6;
     }
 
+    function hashText(value) {
+      const text = String(value || "");
+      let hash = 0;
+
+      for (let i = 0; i < text.length; i++) {
+        hash = ((hash << 5) - hash) + text.charCodeAt(i);
+        hash |= 0;
+      }
+
+      return hash;
+    }
+
     function getUniqueActivityCountForMonth(year, month) {
       const unique = {};
       const totalDays = new Date(year, month + 1, 0).getDate();
@@ -3618,9 +3509,6 @@
       return String(year) + "-unscheduled-notes";
     }
 
-    function getBacklogStorageKey(year) {
-      return "fullYearPlannerBacklogNotes:" + String(year);
-    }
 
     function encodeBacklogNotesValue(notes) {
       return UNSCHEDULED_NOTES_PREFIX + JSON.stringify({
@@ -3630,12 +3518,28 @@
     }
 
     function parseBacklogNotesValue(value) {
-      if (typeof value !== "string" || value.indexOf(UNSCHEDULED_NOTES_PREFIX) !== 0) {
+      const text = String(value || "").trim();
+
+      if (!text) {
         return [];
       }
 
+      if (text.indexOf(UNSCHEDULED_NOTES_PREFIX) !== 0) {
+        return text.split(/\r?\n+/).map(function (line, index) {
+          const noteText = line.trim();
+          return {
+            id: "sheet_note_" + String(index + 1) + "_" + String(Math.abs(hashText(noteText))).slice(0, 10),
+            text: noteText,
+            createdAt: "",
+            updatedAt: ""
+          };
+        }).filter(function (note) {
+          return note.text.length > 0;
+        });
+      }
+
       try {
-        const data = JSON.parse(value.slice(UNSCHEDULED_NOTES_PREFIX.length));
+        const data = JSON.parse(text.slice(UNSCHEDULED_NOTES_PREFIX.length));
         return normalizeBacklogNotes(data && Array.isArray(data.notes) ? data.notes : []);
       } catch (error) {
         return [];
@@ -3661,45 +3565,7 @@
       const sourceKey = getBacklogSourceKey(year);
       const hasSheetBacklogKey = Object.prototype.hasOwnProperty.call(notesByDate, sourceKey);
       const sheetValue = hasSheetBacklogKey ? String(notesByDate[sourceKey] || "") : "";
-      const sheetNotes = parseBacklogNotesValue(sheetValue);
-
-      if (hasSheetBacklogKey) {
-        backlogNotes = sheetNotes;
-        saveBacklogNotesToLocalStorage(year, backlogNotes);
-        return;
-      }
-
-      if (hasAuthoritativeSheetDataForYear(year)) {
-        backlogNotes = [];
-        clearBacklogNotesFromLocalStorage(year);
-        return;
-      }
-
-      backlogNotes = loadBacklogNotesFromLocalStorage(year);
-    }
-
-    function loadBacklogNotesFromLocalStorage(year) {
-      try {
-        return normalizeBacklogNotes(JSON.parse(window.localStorage.getItem(getBacklogStorageKey(year)) || "[]"));
-      } catch (error) {
-        return [];
-      }
-    }
-
-    function clearBacklogNotesFromLocalStorage(year) {
-      try {
-        window.localStorage.removeItem(getBacklogStorageKey(year));
-      } catch (error) {
-        // Local storage can be unavailable in private or restricted browser modes.
-      }
-    }
-
-    function saveBacklogNotesToLocalStorage(year, notes) {
-      try {
-        window.localStorage.setItem(getBacklogStorageKey(year), JSON.stringify(normalizeBacklogNotes(notes)));
-      } catch (error) {
-        // Local storage is a fallback only. Google Sheet saving still runs.
-      }
+      backlogNotes = hasSheetBacklogKey ? parseBacklogNotesValue(sheetValue) : [];
     }
 
     function addBacklogNoteFromInput() {
@@ -3794,29 +3660,39 @@
 
       isBusy = true;
       addBacklogNoteButton.disabled = true;
-      setStatus("Saving...");
+      setStatus("Saving to Google Sheet...");
 
       const normalizedNotes = normalizeBacklogNotes(backlogNotes);
-      callAppsScript("saveNote", {
-        dateKey: getBacklogSourceKey(currentYear),
-        note: encodeBacklogNotesValue(normalizedNotes)
-      })
+      const backlogSourceKey = getBacklogSourceKey(currentYear);
+      const saveRequest = normalizedNotes.length > 0
+        ? callAppsScript("saveNote", {
+            dateKey: backlogSourceKey,
+            note: encodeBacklogNotesValue(normalizedNotes)
+          })
+        : callAppsScript("deleteNote", {
+            dateKey: backlogSourceKey
+          });
+
+      saveRequest
         .then(function () {
           backlogNotes = normalizedNotes;
-          setLocalNote(getBacklogSourceKey(currentYear), encodeBacklogNotesValue(backlogNotes));
-          saveBacklogNotesToLocalStorage(currentYear, backlogNotes);
+
+          if (backlogNotes.length > 0) {
+            setLocalNote(backlogSourceKey, encodeBacklogNotesValue(backlogNotes));
+          } else {
+            removeLocalNote(backlogSourceKey);
+          }
+
           isBusy = false;
           addBacklogNoteButton.disabled = false;
           renderBacklogNotes();
-          setStatus(successMessage || "Note saved.", "success");
+          setStatus(successMessage || "Note saved to Google Sheet.", "success");
         })
         .catch(function (error) {
-          backlogNotes = normalizedNotes;
-          saveBacklogNotesToLocalStorage(currentYear, backlogNotes);
           isBusy = false;
           addBacklogNoteButton.disabled = false;
-          renderBacklogNotes();
-          setStatus(error.message + " Saved locally.", "warning");
+          setStatus("Google Sheet save failed: " + error.message, "error");
+          loadNotesForYear(currentYear, true);
         });
     }
 
@@ -4309,7 +4185,6 @@
       }
 
       notesCacheByYear[year][sourceKey] = value;
-      saveYearCacheToLocalStorage(year, notesCacheByYear[year]);
     }
 
     function removeLocalNote(sourceKey) {
@@ -4319,7 +4194,6 @@
       const year = Number(String(sourceKey).slice(0, 4));
       if (Number.isInteger(year) && notesCacheByYear[year]) {
         delete notesCacheByYear[year][sourceKey];
-        saveYearCacheToLocalStorage(year, notesCacheByYear[year]);
       }
     }
 
