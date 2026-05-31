@@ -501,18 +501,41 @@
     }
 
     .pending-complete-btn {
-      min-height: 28px;
-      padding: 5px 9px;
-      border-radius: 999px;
-      color: #166534;
+      width: 32px;
+      height: 32px;
+      min-height: 32px;
+      padding: 0;
+      border-radius: 8px;
       border-color: #bbf7d0;
-      background: var(--success-soft);
-      font-size: 12px;
+      background: var(--surface);
+      color: #166534;
+      font-size: 0;
       white-space: nowrap;
+      position: relative;
+      flex: 0 0 32px;
     }
 
     .pending-complete-btn::before {
-      content: none;
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 16px;
+      height: 16px;
+      border: 2px solid #86efac;
+      border-radius: 4px;
+      background: #ffffff;
+      transform: translate(-50%, -50%);
+    }
+
+    .pending-complete-btn:hover {
+      background: var(--success-soft);
+      border-color: #86efac;
+    }
+
+    .pending-complete-btn:disabled::before {
+      border-color: var(--border-strong);
+      background: var(--surface-muted);
     }
 
     .pending-activity-title,
@@ -626,6 +649,7 @@
       padding: 14px;
       box-shadow: var(--shadow-soft);
       overflow: hidden;
+      scroll-margin-top: 82px;
     }
 
     .month-header {
@@ -2004,6 +2028,7 @@
       for (let month = 0; month < 12; month++) {
         const monthBox = document.createElement("section");
         monthBox.className = "month";
+        monthBox.id = "month-" + String(year) + "-" + String(month);
         monthBox.setAttribute("aria-labelledby", "month-title-" + String(year) + "-" + String(month));
 
         const monthHeader = document.createElement("div");
@@ -3064,15 +3089,38 @@
       yearInput.value = currentYear;
 
       loadNotesForYear(currentYear, false).then(function () {
-        scrollTodayIntoView();
+        scrollCurrentMonthIntoView("smooth");
+      });
+    }
+
+    function scrollCurrentMonthIntoView(preferredBehavior) {
+      const today = new Date();
+
+      if (currentYear !== today.getFullYear()) {
+        return;
+      }
+
+      const currentMonth = document.getElementById("month-" + String(today.getFullYear()) + "-" + String(today.getMonth()));
+      const fallbackTodayCell = document.getElementById("today-cell");
+      const target = currentMonth || fallbackTodayCell;
+
+      if (!target) {
+        return;
+      }
+
+      const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const behavior = reduceMotion ? "auto" : (preferredBehavior || "smooth");
+
+      window.requestAnimationFrame(function () {
+        target.scrollIntoView({
+          behavior: behavior,
+          block: "start"
+        });
       });
     }
 
     function scrollTodayIntoView() {
-      const todayCell = document.getElementById("today-cell");
-      if (todayCell) {
-        todayCell.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
+      scrollCurrentMonthIntoView("smooth");
     }
 
     function setStatus(message, type) {
@@ -3471,8 +3519,9 @@
         const completeButton = document.createElement("button");
         completeButton.type = "button";
         completeButton.className = "pending-complete-btn";
-        completeButton.textContent = "Done";
+        completeButton.textContent = "";
         completeButton.setAttribute("aria-label", "Mark " + activity.title + " as completed");
+        completeButton.setAttribute("title", "Mark as done");
         completeButton.addEventListener("click", function () {
           markActivityCompletedFromSidebar(activity, completeButton);
         });
@@ -3552,7 +3601,8 @@
       isBusy = true;
       if (button) {
         button.disabled = true;
-        button.textContent = "Saving";
+        button.setAttribute("aria-label", "Saving completion status");
+        button.setAttribute("title", "Saving");
       }
 
       setStatus("Saving...");
@@ -3571,7 +3621,9 @@
           isBusy = false;
           if (button) {
             button.disabled = false;
-            button.textContent = "Done";
+            button.textContent = "";
+            button.setAttribute("aria-label", "Mark " + activity.title + " as completed");
+            button.setAttribute("title", "Mark as done");
           }
           setStatus(error.message, "error");
         });
@@ -3882,7 +3934,9 @@
       });
     }
 
-    loadNotesForYear(currentYear, false);
+    loadNotesForYear(currentYear, false).then(function () {
+      scrollCurrentMonthIntoView("auto");
+    });
   </script>
 </body>
 </html>
