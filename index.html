@@ -1633,6 +1633,7 @@
           <button type="button" id="thisYearButton">Today</button>
           <button type="button" id="rangeSelectButton">Range</button>
           <button type="button" id="reloadButton">Sync</button>
+          <button type="button" id="backendTestButton">Test Backend</button>
           <button type="button" id="printButton">Print</button>
           <input type="search" id="activitySearchInput" class="search-input" placeholder="Search activities" aria-label="Search activities" />
           <button type="button" id="clearSearchButton">Reset</button>
@@ -1704,6 +1705,7 @@
 
   <script>
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwHUmxDQ6GaMJWKRTrxcin5g-UrrwKIOodInRKKnoCpbINW6_gCq0eSDSxQO7R8eizIyg/exec";
+    const EXPECTED_BACKEND_VERSION = "planner-sheet-sync-v2026-05-31-verified-v2";
 
     // Published Google Sheet CSV links supplied by the site owner.
     // These links are read-only. New notes still need APPS_SCRIPT_URL to save to Google Sheets.
@@ -1776,6 +1778,7 @@
     const backlogNoteCount = document.getElementById("backlogNoteCount");
     const yearInput = document.getElementById("yearInput");
     const statusBox = document.getElementById("status");
+    const backendTestButton = document.getElementById("backendTestButton");
 
     const modalBg = document.getElementById("modalBg");
     const modalDate = document.getElementById("modalDate");
@@ -1806,6 +1809,7 @@
     let hasInitialLoadCompleted = false;
     let isSheetSyncing = false;
     let sheetSyncTimerId = null;
+    let backendHealthCache = null;
     let authoritativeSheetYears = {};
 
     let isRangeSelectMode = false;
@@ -2312,32 +2316,87 @@
       });
     }
 
+    function getBackendMismatchMessage(payload) {
+      const backendVersion = payload && payload.backendVersion ? String(payload.backendVersion) : "unknown";
+      return "The live Apps Script backend is not the package backend. Expected " + EXPECTED_BACKEND_VERSION + ", got " + backendVersion + ". Update the Apps Script deployment version and confirm APPS_SCRIPT_URL is the /exec URL for that deployment.";
+    }
+
+    function hasExpectedBackendVersion(payload) {
+      return payload && String(payload.backendVersion || "") === EXPECTED_BACKEND_VERSION;
+    }
+
+    function applyReturnedBackendData(payload, yearsToApply) {
+      if (!payload || !payload.data) {
+        return false;
+      }
+
+      applyBackendDataByYear(payload.data, yearsToApply);
+      notesByDate = mergeCachedNotes(getLoadYearsForPlanner(currentYear));
+      activityRecordsCache = null;
+      return true;
+    }
+
+    function confirmPayloadChanges(payload, notesToSave, dateKeysToDelete, yearsToConfirm) {
+      if (!hasExpectedBackendVersion(payload)) {
+        throw new Error(getBackendMismatchMessage(payload));
+      }
+
+      if (payload.verified !== true) {
+        const missingSavedKeys = payload.missingSavedKeys || [];
+        const stillPresentDeletedKeys = payload.stillPresentDeletedKeys || [];
+        const parts = [];
+
+        if (missingSavedKeys.length > 0) {
+          parts.push("not found after save: " + missingSavedKeys.join(", "));
+        }
+
+        if (stillPresentDeletedKeys.length > 0) {
+          parts.push("still present after delete: " + stillPresentDeletedKeys.join(", "));
+        }
+
+        throw new Error(
+          "Apps Script wrote, flushed, and read the sheet in one request, but verification failed" +
+          (parts.length ? " (" + parts.join("; ") + ")" : "") + ". " +
+          "Check that the Apps Script project is bound to the same spreadsheet shown on your website."
+        );
+      }
+
+      const didApplyReturnedData = applyReturnedBackendData(payload, yearsToConfirm);
+      if (!didApplyReturnedData) {
+        return confirmBackendChanges(notesToSave, dateKeysToDelete);
+      }
+
+      return Promise.resolve(mergeCachedNotes(yearsToConfirm));
+    }
+
     function saveAndConfirmPlannerChanges(notesToSave, dateKeysToDelete) {
       const yearsToConfirm = getYearsForChangeConfirmation(notesToSave, dateKeysToDelete);
       const primaryPayload = {
         notes: JSON.stringify(notesToSave || []),
         deleteKeys: JSON.stringify(dateKeysToDelete || []),
-        returnYears: JSON.stringify(yearsToConfirm)
+        returnYears: JSON.stringify(yearsToConfirm),
+        expectedVersion: EXPECTED_BACKEND_VERSION
       };
 
-      return callAppsScript("saveChanges", primaryPayload)
-        .then(function () {
-          return confirmBackendChanges(notesToSave, dateKeysToDelete);
+      // New backend path: one Apps Script request writes, flushes, reads the same sheet,
+      // and verifies the exact changed keys before the browser shows success.
+      return callAppsScript("saveChangesAndRead", primaryPayload)
+        .then(function (payload) {
+          backendHealthCache = payload;
+          return confirmPayloadChanges(payload, notesToSave, dateKeysToDelete, yearsToConfirm);
         })
         .catch(function (primaryError) {
-          // Retry with single-row actions. This works with both the current backend and
-          // several older deployments that saved saveNote/deleteNote correctly but had
-          // weaker saveChanges behavior.
+          const primaryMessage = primaryError && primaryError.message ? primaryError.message : String(primaryError);
+
+          // Compatibility fallback for older deployments. This is only used when the
+          // deployed backend has not been updated yet or lacks saveChangesAndRead.
           return savePlannerChangesIndividually(notesToSave, dateKeysToDelete, yearsToConfirm)
             .then(function () {
               return confirmBackendChanges(notesToSave, dateKeysToDelete);
             })
             .catch(function (fallbackError) {
-              throw new Error(
-                fallbackError.message +
-                " Primary bulk save error: " +
-                (primaryError && primaryError.message ? primaryError.message : String(primaryError))
-              );
+              const fallbackMessage = fallbackError && fallbackError.message ? fallbackError.message : String(fallbackError);
+              throw new Error(fallbackMessage + " Primary verified-save error: " + primaryMessage);
             });
         });
     }
@@ -4316,6 +4375,56 @@
       }
     }
 
+    function getBackendHealth(force) {
+      if (backendHealthCache && !force) {
+        return Promise.resolve(backendHealthCache);
+      }
+
+      return callAppsScript("health", {
+        expectedVersion: EXPECTED_BACKEND_VERSION
+      }).then(function (payload) {
+        backendHealthCache = payload;
+        return payload;
+      });
+    }
+
+    function runBackendWriteReadTest() {
+      if (isBusy) {
+        return;
+      }
+
+      isBusy = true;
+      if (backendTestButton) {
+        backendTestButton.disabled = true;
+      }
+      setStatus("Testing Apps Script and Google Sheet write/read...");
+
+      callAppsScript("selfTest", {
+        expectedVersion: EXPECTED_BACKEND_VERSION,
+        year: String(currentYear)
+      })
+        .then(function (payload) {
+          backendHealthCache = payload;
+          if (!hasExpectedBackendVersion(payload)) {
+            throw new Error(getBackendMismatchMessage(payload));
+          }
+          if (payload.writeReadOk !== true) {
+            throw new Error("Backend self-test did not read back the temporary row it wrote.");
+          }
+          const spreadsheetName = payload.spreadsheetName ? " Spreadsheet: " + payload.spreadsheetName + "." : "";
+          setStatus("Backend OK. Write/read test passed." + spreadsheetName, "success");
+        })
+        .catch(function (error) {
+          setStatus("Backend test failed: " + error.message, "error");
+        })
+        .finally(function () {
+          isBusy = false;
+          if (backendTestButton) {
+            backendTestButton.disabled = false;
+          }
+        });
+    }
+
     function callAppsScript(action, params) {
       return new Promise(function (resolve, reject) {
         const callbackName =
@@ -4386,6 +4495,10 @@
           }
         }
       });
+    }
+
+    if (backendTestButton) {
+      backendTestButton.addEventListener("click", runBackendWriteReadTest);
     }
 
     document.addEventListener("visibilitychange", function () {
