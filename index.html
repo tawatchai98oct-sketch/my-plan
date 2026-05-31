@@ -615,15 +615,19 @@
 
     .backlog-note-actions {
       display: grid;
-      grid-template-columns: 1fr auto;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 6px;
+      align-items: center;
     }
 
     .backlog-note-actions button {
+      width: 100%;
       min-height: 30px;
       padding: 5px 8px;
       font-size: 12px;
+      white-space: nowrap;
     }
+
 
     .backlog-schedule-btn {
       color: #166534 !important;
@@ -1131,6 +1135,132 @@
       border: 1px solid var(--border);
     }
 
+
+    /* Animated loading indicators for calendar, notes, activity cards, buttons, and modal saves. */
+    @keyframes plannerSpinnerRotate {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-message {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .loading-message::before,
+    .status.is-loading::before,
+    .button-loading::before,
+    .modal-loading-overlay::before,
+    .card-loading::before {
+      content: "";
+      width: 14px;
+      height: 14px;
+      flex: 0 0 14px;
+      border: 2px solid var(--border-strong);
+      border-top-color: var(--primary);
+      border-radius: 999px;
+      animation: plannerSpinnerRotate 0.75s linear infinite;
+    }
+
+    .status.is-loading {
+      gap: 8px;
+      color: var(--primary-dark);
+      background: var(--primary-soft);
+      border-color: #bfdbfe;
+    }
+
+    .button-loading {
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      cursor: wait !important;
+    }
+
+    .button-loading::before {
+      width: 13px;
+      height: 13px;
+      flex-basis: 13px;
+      border-color: rgba(255, 255, 255, 0.42);
+      border-top-color: currentColor;
+    }
+
+    .backlog-schedule-btn.button-loading::before,
+    .backlog-delete-btn.button-loading::before,
+    .close-btn.button-loading::before {
+      border-color: var(--border-strong);
+      border-top-color: currentColor;
+    }
+
+    .pending-complete-btn.button-loading::before {
+      width: 16px;
+      height: 16px;
+      border: 2px solid #bbf7d0;
+      border-top-color: #166534;
+      border-radius: 999px;
+      background: transparent;
+      transform: translate(-50%, -50%);
+      animation: plannerSpinnerRotate 0.75s linear infinite;
+    }
+
+    .pending-complete-btn.button-loading {
+      background: var(--success-soft);
+      border-color: #86efac;
+    }
+
+    .card-loading {
+      position: relative;
+      cursor: wait;
+    }
+
+    .card-loading > * {
+      opacity: 0.42;
+    }
+
+    .card-loading::before {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      z-index: 8;
+      width: 18px;
+      height: 18px;
+      transform: translate(-50%, -50%);
+      background: var(--surface);
+    }
+
+    .modal {
+      isolation: isolate;
+    }
+
+    .modal-loading-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      border-radius: inherit;
+      background: rgba(255, 255, 255, 0.78);
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 700;
+      backdrop-filter: blur(2px);
+      -webkit-backdrop-filter: blur(2px);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .loading-message::before,
+      .status.is-loading::before,
+      .button-loading::before,
+      .modal-loading-overlay::before,
+      .card-loading::before,
+      .pending-complete-btn.button-loading::before {
+        animation-duration: 1.6s;
+      }
+    }
+
     @media (max-width: 1280px) {
       :root {
         --sidebar-width: 400px;
@@ -1234,7 +1364,7 @@
       }
 
       .backlog-note-actions {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
       }
     }
 
@@ -1976,8 +2106,10 @@
 
     function loadNotesForYear(year, forceReload) {
       const yearsToLoad = getLoadYearsForPlanner(year);
-      calendar.innerHTML = '<div class="loading-message">Loading notes from Google Sheet...</div>';
-      setStatus("Loading Google Sheet...");
+      showCalendarLoading("Loading notes from Google Sheet...");
+      showPendingLoading("Loading open activities...");
+      showBacklogLoading("Loading notes...");
+      setStatus("Loading Google Sheet...", "loading");
       return refreshYearsFromBackend(yearsToLoad, year, true);
     }
 
@@ -2619,6 +2751,10 @@
       const yearsToLoad = getLoadYearsForPlanner(currentYear);
       const previousSnapshot = stableStringify(mergeCachedNotes(yearsToLoad));
       isSheetSyncing = true;
+
+      if (!isAutomatic) {
+        setStatus("Checking Google Sheet...", "loading");
+      }
 
       return loadMultipleYearNotes(yearsToLoad, true)
         .then(function () {
@@ -3416,7 +3552,7 @@
 
       isBusy = true;
       setModalBusy(true, "save");
-      setStatus("Saving...");
+      setStatus("Saving to Google Sheet...", "loading");
 
       const notesToSave = [];
       const dateKeysToDelete = [];
@@ -3538,7 +3674,8 @@
     }
 
     function setModalBusy(busy, action) {
-      saveButton.disabled = busy;
+      const isSaving = busy && action === "save";
+      setButtonLoading(saveButton, isSaving, "Saving");
       cancelButton.disabled = busy;
       addActivityButton.disabled = busy;
 
@@ -3546,7 +3683,12 @@
         element.disabled = busy;
       });
 
-      saveButton.textContent = busy && action === "save" ? "Saving..." : "Save All";
+      if (!isSaving) {
+        saveButton.disabled = busy;
+        saveButton.textContent = "Save All";
+      }
+
+      setModalLoading(busy, isSaving ? "Saving to Google Sheet..." : "Loading...");
     }
 
     function encodeActivitiesValue(activities) {
@@ -3797,6 +3939,106 @@
       if (type) {
         statusBox.classList.add(type);
       }
+
+      statusBox.classList.toggle("is-loading", type === "loading");
+    }
+
+    function createLoadingMessage(message) {
+      const loadingMessage = document.createElement("div");
+      loadingMessage.className = "loading-message";
+      loadingMessage.setAttribute("role", "status");
+      loadingMessage.setAttribute("aria-live", "polite");
+      loadingMessage.textContent = message || "Loading...";
+      return loadingMessage;
+    }
+
+    function showCalendarLoading(message) {
+      if (!calendar) {
+        return;
+      }
+
+      calendar.innerHTML = "";
+      calendar.appendChild(createLoadingMessage(message || "Loading calendar..."));
+    }
+
+    function showPendingLoading(message) {
+      if (!pendingActivityList || !pendingActivityCount) {
+        return;
+      }
+
+      pendingActivityCount.textContent = "…";
+      pendingActivityList.innerHTML = "";
+      pendingActivityList.appendChild(createLoadingMessage(message || "Loading open activities..."));
+    }
+
+    function showBacklogLoading(message) {
+      if (!backlogNoteList || !backlogNoteCount) {
+        return;
+      }
+
+      backlogNoteCount.textContent = "…";
+      backlogNoteList.innerHTML = "";
+      backlogNoteList.appendChild(createLoadingMessage(message || "Loading notes..."));
+    }
+
+    function setButtonLoading(button, busy, loadingText) {
+      if (!button) {
+        return;
+      }
+
+      if (!Object.prototype.hasOwnProperty.call(button.dataset, "originalText")) {
+        button.dataset.originalText = button.textContent || "";
+      }
+
+      button.classList.toggle("button-loading", busy);
+      button.disabled = busy;
+      button.setAttribute("aria-busy", busy ? "true" : "false");
+
+      if (busy) {
+        if (typeof loadingText === "string") {
+          button.textContent = loadingText;
+        }
+        return;
+      }
+
+      button.textContent = button.dataset.originalText || "";
+      delete button.dataset.originalText;
+    }
+
+    function setCardLoading(card, busy) {
+      if (!card) {
+        return;
+      }
+
+      card.classList.toggle("card-loading", busy);
+      card.setAttribute("aria-busy", busy ? "true" : "false");
+    }
+
+    function setModalLoading(busy, message) {
+      const modal = modalBg ? modalBg.querySelector(".modal") : null;
+      if (!modal) {
+        return;
+      }
+
+      modal.classList.toggle("modal-loading", busy);
+      modal.setAttribute("aria-busy", busy ? "true" : "false");
+
+      let overlay = modal.querySelector(".modal-loading-overlay");
+      if (busy) {
+        if (!overlay) {
+          overlay = document.createElement("div");
+          overlay.className = "modal-loading-overlay";
+          overlay.setAttribute("role", "status");
+          overlay.setAttribute("aria-live", "polite");
+          modal.appendChild(overlay);
+        }
+        overlay.textContent = message || "Loading...";
+        return;
+      }
+
+      if (overlay) {
+        overlay.remove();
+      }
     }
 
     function showRowError(row, message) {
@@ -4016,8 +4258,9 @@
       }
 
       isBusy = true;
-      addBacklogNoteButton.disabled = true;
-      setStatus("Saving to Google Sheet...");
+      setButtonLoading(addBacklogNoteButton, true, "Saving");
+      showBacklogLoading("Saving note to Google Sheet...");
+      setStatus("Saving note to Google Sheet...", "loading");
 
       const normalizedNotes = normalizeBacklogNotes(backlogNotes);
       const backlogSourceKey = getBacklogSourceKey(currentYear);
@@ -4029,13 +4272,13 @@
       saveAndConfirmPlannerChanges(notesToSave, dateKeysToDelete)
         .then(function () {
           isBusy = false;
-          addBacklogNoteButton.disabled = false;
+          setButtonLoading(addBacklogNoteButton, false);
           renderCalendar(currentYear);
           setStatus(successMessage || "Note saved and confirmed in Google Sheet.", "success");
         })
         .catch(function (error) {
           isBusy = false;
-          addBacklogNoteButton.disabled = false;
+          setButtonLoading(addBacklogNoteButton, false);
           setStatus("Google Sheet save failed: " + error.message, "error");
           loadNotesForYear(currentYear, true);
         });
@@ -4276,13 +4519,15 @@
       }
 
       isBusy = true;
+      const loadingCard = button && button.closest ? button.closest(".pending-activity-card") : null;
+      setCardLoading(loadingCard, true);
       if (button) {
-        button.disabled = true;
+        setButtonLoading(button, true, "");
         button.setAttribute("aria-label", "Saving completion status");
         button.setAttribute("title", "Saving");
       }
 
-      setStatus("Saving...");
+      setStatus("Saving completion status...", "loading");
 
       const completedNoteValue = encodeActivitiesValue(updatedActivities);
       const notesToSave = [{ dateKey: activity.sourceKey, note: completedNoteValue }];
@@ -4295,8 +4540,9 @@
         })
         .catch(function (error) {
           isBusy = false;
+          setCardLoading(loadingCard, false);
           if (button) {
-            button.disabled = false;
+            setButtonLoading(button, false);
             button.textContent = "";
             button.setAttribute("aria-label", "Mark " + activity.title + " as completed");
             button.setAttribute("title", "Mark as done");
@@ -4561,9 +4807,9 @@
 
       isBusy = true;
       if (backendTestButton) {
-        backendTestButton.disabled = true;
+        setButtonLoading(backendTestButton, true, "Testing");
       }
-      setStatus("Testing Apps Script and Google Sheet write/read...");
+      setStatus("Testing Apps Script and Google Sheet write/read...", "loading");
 
       callAppsScript("selfTest", {
         expectedVersion: EXPECTED_BACKEND_VERSION,
@@ -4586,7 +4832,7 @@
         .finally(function () {
           isBusy = false;
           if (backendTestButton) {
-            backendTestButton.disabled = false;
+            setButtonLoading(backendTestButton, false);
           }
         });
     }
