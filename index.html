@@ -2013,14 +2013,7 @@
       const yearsNeedingLoad = yearsToLoad.slice();
 
       const applyYearData = function (dataByYear) {
-        yearsNeedingLoad.forEach(function (yearToLoad) {
-          const rawYearData = dataByYear[String(yearToLoad)] || dataByYear[yearToLoad] || {};
-          const yearData = rawYearData && typeof rawYearData === "object" && !Array.isArray(rawYearData) ? rawYearData : {};
-          notesCacheByYear[yearToLoad] = yearData;
-          authoritativeSheetYears[String(yearToLoad)] = true;
-        });
-
-        return notesCacheByYear;
+        return applyBackendDataByYear(dataByYear, yearsNeedingLoad);
       };
 
       const loadFromAppsScript = function () {
@@ -2188,6 +2181,102 @@
       });
 
       return merged;
+    }
+
+
+    function normalizeYearList(years) {
+      const lookup = {};
+      const result = [];
+
+      (years || []).forEach(function (year) {
+        const parsedYear = Number(year);
+        if (!Number.isInteger(parsedYear) || parsedYear < 1900 || parsedYear > 9999 || lookup[parsedYear]) {
+          return;
+        }
+
+        lookup[parsedYear] = true;
+        result.push(parsedYear);
+      });
+
+      result.sort(function (a, b) {
+        return a - b;
+      });
+
+      return result;
+    }
+
+    function getYearsForStorageKeys(storageKeys) {
+      return normalizeYearList((storageKeys || []).map(function (storageKey) {
+        return Number(String(storageKey || "").slice(0, 4));
+      }));
+    }
+
+    function applyBackendDataByYear(dataByYear, yearsToApply) {
+      const source = dataByYear && typeof dataByYear === "object" && !Array.isArray(dataByYear) ? dataByYear : {};
+
+      yearsToApply.forEach(function (yearToApply) {
+        const rawYearData = source[String(yearToApply)] || source[yearToApply] || {};
+        const yearData = rawYearData && typeof rawYearData === "object" && !Array.isArray(rawYearData) ? rawYearData : {};
+        notesCacheByYear[yearToApply] = yearData;
+        authoritativeSheetYears[String(yearToApply)] = true;
+      });
+
+      return notesCacheByYear;
+    }
+
+    function getYearsForChangeConfirmation(notesToSave, dateKeysToDelete) {
+      const storageKeys = [];
+
+      (notesToSave || []).forEach(function (item) {
+        storageKeys.push(item.dateKey);
+      });
+
+      (dateKeysToDelete || []).forEach(function (dateKey) {
+        storageKeys.push(dateKey);
+      });
+
+      return normalizeYearList(getLoadYearsForPlanner(currentYear).concat(getYearsForStorageKeys(storageKeys)));
+    }
+
+    function confirmBackendChanges(notesToSave, dateKeysToDelete, response) {
+      const yearsToLoad = getYearsForChangeConfirmation(notesToSave, dateKeysToDelete);
+      const applyReturnedData = response && response.data
+        ? Promise.resolve(applyBackendDataByYear(response.data, yearsToLoad))
+        : loadMultipleYearNotes(yearsToLoad, true);
+
+      return applyReturnedData.then(function () {
+        const latestNotes = mergeCachedNotes(yearsToLoad);
+        const missingSavedKeys = (notesToSave || []).filter(function (item) {
+          return String(latestNotes[item.dateKey] || "") !== String(item.note || "");
+        }).map(function (item) {
+          return item.dateKey;
+        });
+
+        const stillPresentDeletedKeys = (dateKeysToDelete || []).filter(function (dateKey) {
+          return Object.prototype.hasOwnProperty.call(latestNotes, dateKey);
+        });
+
+        if (missingSavedKeys.length > 0 || stillPresentDeletedKeys.length > 0) {
+          const parts = [];
+
+          if (missingSavedKeys.length > 0) {
+            parts.push("not found after save: " + missingSavedKeys.join(", "));
+          }
+
+          if (stillPresentDeletedKeys.length > 0) {
+            parts.push("still present after delete: " + stillPresentDeletedKeys.join(", "));
+          }
+
+          throw new Error(
+            "Google Sheet did not return the confirmed change (" + parts.join("; ") + "). " +
+            "Update the deployed Apps Script with the included App Script.txt and confirm APPS_SCRIPT_URL points to that deployment."
+          );
+        }
+
+        notesByDate = mergeCachedNotes(getLoadYearsForPlanner(currentYear));
+        activityRecordsCache = null;
+        return latestNotes;
+      });
     }
 
     function hasAuthoritativeSheetDataForYear(year) {
@@ -3045,10 +3134,13 @@
         }
       }
 
+      const yearsToConfirm = getYearsForChangeConfirmation(notesToSave, dateKeysToDelete);
+
       const syncChanges = function () {
         return callAppsScript("saveChanges", {
           notes: JSON.stringify(notesToSave),
-          deleteKeys: JSON.stringify(dateKeysToDelete)
+          deleteKeys: JSON.stringify(dateKeysToDelete),
+          returnYears: JSON.stringify(yearsToConfirm)
         }).catch(function () {
           const fallbackTasks = notesToSave.map(function (item) {
             return callAppsScript("saveNote", {
@@ -3067,35 +3159,14 @@
         });
       };
 
-      function applyActivitySaveLocally() {
-        sourceKeysToSave.forEach(function (sourceKey) {
-          const activities = groupedBySourceKey[sourceKey];
-
-          if (activities.length > 0) {
-            setLocalNote(sourceKey, encodeActivitiesValue(activities));
-          } else {
-            removeLocalNote(sourceKey);
-          }
-        });
-
-        if (scheduledBacklogNoteId) {
-          backlogNotes = updatedBacklogNotesAfterScheduling;
-          if (backlogNotes.length > 0) {
-            setLocalNote(getBacklogSourceKey(currentYear), encodeBacklogNotesValue(backlogNotes));
-          } else {
-            removeLocalNote(getBacklogSourceKey(currentYear));
-          }
-          renderBacklogNotes();
-          pendingScheduledBacklogNoteId = "";
-        }
-      }
-
       syncChanges()
+        .then(function (response) {
+          return confirmBackendChanges(notesToSave, dateKeysToDelete, response);
+        })
         .then(function () {
-          applyActivitySaveLocally();
           closeModal();
           renderCalendar(currentYear);
-          setStatus(scheduledBacklogNoteId ? "Scheduled in Google Sheet." : "Saved to Google Sheet.", "success");
+          setStatus(scheduledBacklogNoteId ? "Scheduled and confirmed in Google Sheet." : "Saved and confirmed in Google Sheet.", "success");
         })
         .catch(function (error) {
           isBusy = false;
@@ -3673,20 +3744,20 @@
             dateKey: backlogSourceKey
           });
 
+      const notesToSave = normalizedNotes.length > 0
+        ? [{ dateKey: backlogSourceKey, note: encodeBacklogNotesValue(normalizedNotes) }]
+        : [];
+      const dateKeysToDelete = normalizedNotes.length > 0 ? [] : [backlogSourceKey];
+
       saveRequest
+        .then(function (response) {
+          return confirmBackendChanges(notesToSave, dateKeysToDelete, response);
+        })
         .then(function () {
-          backlogNotes = normalizedNotes;
-
-          if (backlogNotes.length > 0) {
-            setLocalNote(backlogSourceKey, encodeBacklogNotesValue(backlogNotes));
-          } else {
-            removeLocalNote(backlogSourceKey);
-          }
-
           isBusy = false;
           addBacklogNoteButton.disabled = false;
-          renderBacklogNotes();
-          setStatus(successMessage || "Note saved to Google Sheet.", "success");
+          renderCalendar(currentYear);
+          setStatus(successMessage || "Note saved and confirmed in Google Sheet.", "success");
         })
         .catch(function (error) {
           isBusy = false;
@@ -3939,15 +4010,21 @@
 
       setStatus("Saving...");
 
+      const completedNoteValue = encodeActivitiesValue(updatedActivities);
+      const notesToSave = [{ dateKey: activity.sourceKey, note: completedNoteValue }];
+
       callAppsScript("saveNote", {
         dateKey: activity.sourceKey,
-        note: encodeActivitiesValue(updatedActivities)
+        note: completedNoteValue,
+        returnYears: JSON.stringify(getYearsForChangeConfirmation(notesToSave, []))
       })
+        .then(function (response) {
+          return confirmBackendChanges(notesToSave, [], response);
+        })
         .then(function () {
-          setLocalNote(activity.sourceKey, encodeActivitiesValue(updatedActivities));
           isBusy = false;
           renderCalendar(currentYear);
-          setStatus("Done.", "success");
+          setStatus("Done and confirmed in Google Sheet.", "success");
         })
         .catch(function (error) {
           isBusy = false;
