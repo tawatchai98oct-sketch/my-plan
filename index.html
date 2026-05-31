@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <title>Planner</title>
+  <link rel="preconnect" href="https://script.google.com" />
+  <link rel="preconnect" href="https://script.googleusercontent.com" />
 
   <style>
 
@@ -1703,9 +1705,16 @@
   <script>
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwHUmxDQ6GaMJWKRTrxcin5g-UrrwKIOodInRKKnoCpbINW6_gCq0eSDSxQO7R8eizIyg/exec";
 
+    // Published Google Sheet CSV links supplied by the site owner.
+    // These links are read-only. New notes still need APPS_SCRIPT_URL to save to Google Sheets.
+    const NOTE_DATA_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSwp_rbUc5U4IRGdTAmQ0r2RwopuLKMTlPd8VNUMq05JJ4jdEhdJ4rquqdorc4i97YSfhO4CongHx40/pub?gid=892215063&single=true&output=csv";
+    const BACKEND_SETUP_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSwp_rbUc5U4IRGdTAmQ0r2RwopuLKMTlPd8VNUMq05JJ4jdEhdJ4rquqdorc4i97YSfhO4CongHx40/pub?gid=1540282495&single=true&output=csv";
+    const NOTES_LOG_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSwp_rbUc5U4IRGdTAmQ0r2RwopuLKMTlPd8VNUMq05JJ4jdEhdJ4rquqdorc4i97YSfhO4CongHx40/pub?gid=225167706&single=true&output=csv";
+
     const ACTIVITIES_PREFIX = "__ACTIVITIES_V2__";
     const UNSCHEDULED_NOTES_PREFIX = "__UNSCHEDULED_NOTES_V1__";
     const OLD_RANGE_PREFIX = "__RANGE_ACTIVITY__";
+    const YEAR_CACHE_PREFIX = "__PLANNER_YEAR_CACHE_V1__";
     const MAX_VISIBLE_BARS = 3;
 
     const THAILAND_HOLIDAYS_BY_YEAR = {
@@ -1789,6 +1798,7 @@
     let notesCacheByYear = {};
     let dateCellByKey = {};
     let activitiesByDate = {};
+    let activityRecordsCache = null;
     let backlogNotes = [];
     let pendingScheduledBacklogNoteId = "";
     let isBusy = false;
@@ -1797,6 +1807,7 @@
 
     let isRangeSelectMode = false;
     let rangeStartDateKey = "";
+    let lastRangePreviewDateKey = "";
 
     yearInput.value = currentYear;
     initializeHeaderTools();
@@ -1891,7 +1902,34 @@
       }
     });
 
+    calendar.addEventListener("click", function (event) {
+      const dateCell = event.target.closest ? event.target.closest(".day:not(.empty)") : null;
+
+      if (!dateCell || !calendar.contains(dateCell) || !dateCell.dataset.dateKey) {
+        return;
+      }
+
+      handleDateClick(dateCell.dataset.dateKey);
+    });
+
+    calendar.addEventListener("mouseover", function (event) {
+      const dateCell = event.target.closest ? event.target.closest(".day:not(.empty)") : null;
+
+      if (!dateCell || !calendar.contains(dateCell) || !dateCell.dataset.dateKey) {
+        return;
+      }
+
+      if (lastRangePreviewDateKey === dateCell.dataset.dateKey) {
+        return;
+      }
+
+      lastRangePreviewDateKey = dateCell.dataset.dateKey;
+      previewRangeSelection(dateCell.dataset.dateKey);
+    });
+
     calendar.addEventListener("mouseleave", function () {
+      lastRangePreviewDateKey = "";
+
       if (isRangeSelectMode && rangeStartDateKey) {
         clearRangePreview();
         markRangeStartDate();
@@ -1952,28 +1990,53 @@
 
     function loadNotesForYear(year, forceReload) {
       const yearsToLoad = [year - 1, year, year + 1];
-      const hasAllCachedYears = yearsToLoad.every(function (yearToLoad) {
+      const hasAllMemoryYears = yearsToLoad.every(function (yearToLoad) {
         return !forceReload && Object.prototype.hasOwnProperty.call(notesCacheByYear, yearToLoad);
       });
 
-      if (hasAllCachedYears) {
+      if (hasAllMemoryYears) {
         notesByDate = mergeCachedNotes(yearsToLoad);
+        activityRecordsCache = null;
         renderCalendar(year);
         setStatus("Loaded.", "success");
+        return Promise.resolve(notesByDate);
+      }
+
+      if (!forceReload) {
+        hydrateYearCacheFromLocalStorage(yearsToLoad);
+      }
+
+      const hasUsableLocalCache = yearsToLoad.every(function (yearToLoad) {
+        return !forceReload && Object.prototype.hasOwnProperty.call(notesCacheByYear, yearToLoad);
+      });
+
+      if (hasUsableLocalCache) {
+        notesByDate = mergeCachedNotes(yearsToLoad);
+        activityRecordsCache = null;
+        renderCalendar(year);
+        setStatus("Loaded cached data. Syncing...", "success");
+
+        refreshYearsFromBackend(yearsToLoad, year, forceReload).catch(function (error) {
+          setStatus("Using cached data. Sync failed: " + error.message, "warning");
+        });
+
         return Promise.resolve(notesByDate);
       }
 
       calendar.innerHTML = '<div class="loading-message">Loading notes...</div>';
       setStatus("Loading...");
 
-      return Promise.all(yearsToLoad.map(function (yearToLoad) {
-        return loadSingleYearNotes(yearToLoad, forceReload);
-      }))
+      return refreshYearsFromBackend(yearsToLoad, year, forceReload);
+    }
+
+    function refreshYearsFromBackend(yearsToLoad, displayYear, forceReload) {
+      return loadMultipleYearNotes(yearsToLoad, forceReload)
         .then(function () {
           notesByDate = mergeCachedNotes(yearsToLoad);
-          renderCalendar(year);
+          activityRecordsCache = null;
+          renderCalendar(displayYear);
 
-          const currentYearCount = Object.keys(notesCacheByYear[year] || {}).length;
+          const currentYearCount = Object.keys(notesCacheByYear[displayYear] || {}).length;
           const mergedCount = Object.keys(notesByDate).length;
           setStatus(
             "Loaded. Records: " + currentYearCount +
@@ -1984,11 +2047,185 @@
           return notesByDate;
         })
         .catch(function (error) {
-          notesByDate = {};
-          renderCalendar(year);
+          notesByDate = mergeCachedNotes(yearsToLoad);
+          activityRecordsCache = null;
+          renderCalendar(displayYear);
           setStatus(error.message, "error");
           return null;
         });
+    }
+
+    function loadMultipleYearNotes(yearsToLoad, forceReload) {
+      const yearsNeedingLoad = yearsToLoad.filter(function (yearToLoad) {
+        return forceReload || !Object.prototype.hasOwnProperty.call(notesCacheByYear, yearToLoad);
+      });
+
+      if (yearsNeedingLoad.length === 0) {
+        return Promise.resolve(notesCacheByYear);
+      }
+
+      const applyYearData = function (dataByYear) {
+        yearsNeedingLoad.forEach(function (yearToLoad) {
+          const yearData = dataByYear[String(yearToLoad)] || dataByYear[yearToLoad] || {};
+          notesCacheByYear[yearToLoad] = yearData;
+          saveYearCacheToLocalStorage(yearToLoad, yearData);
+        });
+
+        return notesCacheByYear;
+      };
+
+      const loadFromAppsScript = function () {
+        return callAppsScript("getNotesForYears", {
+          years: JSON.stringify(yearsNeedingLoad)
+        })
+          .then(function (response) {
+            return applyYearData(response.data || {});
+          })
+          .catch(function () {
+            return Promise.all(yearsNeedingLoad.map(function (yearToLoad) {
+              return loadSingleYearNotes(yearToLoad, true);
+            }));
+          });
+      };
+
+      return loadPublishedNoteDataCsv(yearsNeedingLoad, forceReload)
+        .then(applyYearData)
+        .catch(loadFromAppsScript);
+    }
+
+    function loadPublishedNoteDataCsv(yearsToLoad, forceReload) {
+      if (!NOTE_DATA_CSV_URL) {
+        return Promise.reject(new Error("Published Note Data CSV URL is not configured."));
+      }
+
+      let csvUrl;
+      try {
+        csvUrl = new URL(NOTE_DATA_CSV_URL);
+      } catch (error) {
+        return Promise.reject(new Error("Published Note Data CSV URL is invalid."));
+      }
+
+      if (forceReload) {
+        csvUrl.searchParams.set("_cacheBust", String(Date.now()));
+      }
+
+      return fetch(csvUrl.toString(), {
+        cache: forceReload ? "reload" : "default"
+      })
+        .then(function (response) {
+          if (!response.ok) {
+            throw new Error("Published Note Data CSV returned HTTP " + response.status + ".");
+          }
+
+          return response.text();
+        })
+        .then(function (csvText) {
+          return parsePublishedNoteDataCsv(csvText, yearsToLoad);
+        });
+    }
+
+    function parsePublishedNoteDataCsv(csvText, yearsToLoad) {
+      const rows = parseCsvRows(csvText).filter(function (row) {
+        return row.some(function (cell) {
+          return String(cell || "").trim() !== "";
+        });
+      });
+
+      const result = {};
+      const wantedYears = {};
+
+      yearsToLoad.forEach(function (yearToLoad) {
+        const year = String(yearToLoad);
+        wantedYears[year] = true;
+        result[year] = {};
+      });
+
+      if (rows.length === 0) {
+        return result;
+      }
+
+      const header = rows[0].map(function (cell) {
+        return String(cell || "").trim().toLowerCase().replace(/\s+/g, "");
+      });
+
+      let dateKeyIndex = header.indexOf("datekey");
+      let noteIndex = header.indexOf("note");
+      let firstDataRowIndex = 1;
+
+      if (dateKeyIndex < 0 || noteIndex < 0) {
+        dateKeyIndex = 0;
+        noteIndex = 1;
+        firstDataRowIndex = 0;
+
+        if (!rows[0] || !isValidPlannerStorageKey(rows[0][dateKeyIndex])) {
+          throw new Error("Published Note Data CSV must contain DateKey and Note columns.");
+        }
+      }
+
+      rows.slice(firstDataRowIndex).forEach(function (row) {
+        const dateKey = String(row[dateKeyIndex] || "").trim();
+
+        if (!isValidPlannerStorageKey(dateKey)) {
+          return;
+        }
+
+        const year = dateKey.slice(0, 4);
+        if (!wantedYears[year]) {
+          return;
+        }
+
+        result[year][dateKey] = String(row[noteIndex] || "");
+      });
+
+      return result;
+    }
+
+    function parseCsvRows(csvText) {
+      const rows = [];
+      let row = [];
+      let value = "";
+      let insideQuotes = false;
+      const text = String(csvText || "");
+
+      for (let index = 0; index < text.length; index++) {
+        const char = text[index];
+        const nextChar = text[index + 1];
+
+        if (insideQuotes) {
+          if (char === '"' && nextChar === '"') {
+            value += '"';
+            index++;
+          } else if (char === '"') {
+            insideQuotes = false;
+          } else {
+            value += char;
+          }
+          continue;
+        }
+
+        if (char === '"') {
+          insideQuotes = true;
+        } else if (char === ",") {
+          row.push(value);
+          value = "";
+        } else if (char === "\n") {
+          row.push(value);
+          rows.push(row);
+          row = [];
+          value = "";
+        } else if (char !== "\r") {
+          value += char;
+        }
+      }
+
+      row.push(value);
+      rows.push(row);
+      return rows;
+    }
+
+    function isValidPlannerStorageKey(dateKey) {
+      const text = String(dateKey || "").trim();
+      return isValidDateKey(text) || /^\d{4}-unscheduled-notes$/.test(text);
     }
 
     function loadSingleYearNotes(year, forceReload) {
@@ -1999,8 +2236,55 @@
       return callAppsScript("getNotesForYear", { year: year })
         .then(function (response) {
           notesCacheByYear[year] = response.data || {};
+          saveYearCacheToLocalStorage(year, notesCacheByYear[year]);
           return notesCacheByYear[year];
         });
+    }
+
+    function hydrateYearCacheFromLocalStorage(yearsToLoad) {
+      yearsToLoad.forEach(function (yearToLoad) {
+        if (Object.prototype.hasOwnProperty.call(notesCacheByYear, yearToLoad)) {
+          return;
+        }
+
+        const cachedYear = loadYearCacheFromLocalStorage(yearToLoad);
+        if (cachedYear) {
+          notesCacheByYear[yearToLoad] = cachedYear;
+        }
+      });
+    }
+
+    function getYearCacheStorageKey(year) {
+      return YEAR_CACHE_PREFIX + ":" + String(year);
+    }
+
+    function loadYearCacheFromLocalStorage(year) {
+      try {
+        const raw = window.localStorage.getItem(getYearCacheStorageKey(year));
+        if (!raw) {
+          return null;
+        }
+
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed.data !== "object" || Array.isArray(parsed.data)) {
+          return null;
+        }
+
+        return parsed.data;
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function saveYearCacheToLocalStorage(year, data) {
+      try {
+        window.localStorage.setItem(getYearCacheStorageKey(year), JSON.stringify({
+          savedAt: new Date().toISOString(),
+          data: data || {}
+        }));
+      } catch (error) {
+        // Local storage only improves warm-load speed. The app still works without it.
+      }
     }
 
     function mergeCachedNotes(years) {
@@ -2132,14 +2416,6 @@
             dateCell.appendChild(moreIndicator);
           }
 
-          dateCell.addEventListener("click", function () {
-            handleDateClick(dateKey);
-          });
-
-          dateCell.addEventListener("mouseenter", function () {
-            previewRangeSelection(dateKey);
-          });
-
           daysGrid.appendChild(dateCell);
         }
 
@@ -2197,6 +2473,7 @@
     function cancelRangeSelectMode(showStatus) {
       isRangeSelectMode = false;
       rangeStartDateKey = "";
+      lastRangePreviewDateKey = "";
       rangeSelectButton.classList.remove("range-active");
       rangeSelectButton.textContent = "Range Select";
       clearRangeSelection();
@@ -2309,10 +2586,9 @@
 
     function rebuildActivitiesMap() {
       activitiesByDate = {};
+      activityRecordsCache = buildActivityRecords();
 
-      const records = getAllActivityRecords();
-
-      records.forEach(function (record) {
+      activityRecordsCache.forEach(function (record) {
         record.activities.forEach(function (activity) {
           const normalizedActivity = normalizeActivityDates(activity, record.sourceKey);
 
@@ -2324,6 +2600,7 @@
             return;
           }
 
+          const colorIndex = getStableColorIndex(normalizedActivity.id + normalizedActivity.title);
           const dateKeys = getDateKeysInRange(normalizedActivity.start, normalizedActivity.end);
 
           dateKeys.forEach(function (dateKey) {
@@ -2338,7 +2615,7 @@
               start: normalizedActivity.start,
               end: normalizedActivity.end,
               completed: normalizedActivity.completed,
-              colorIndex: getStableColorIndex(normalizedActivity.id + normalizedActivity.title)
+              colorIndex: colorIndex
             });
           });
         });
@@ -2361,7 +2638,7 @@
       });
     }
 
-    function getAllActivityRecords() {
+    function buildActivityRecords() {
       const records = [];
 
       Object.keys(notesByDate).forEach(function (sourceKey) {
@@ -2376,6 +2653,14 @@
       });
 
       return records;
+    }
+
+    function getAllActivityRecords() {
+      if (!activityRecordsCache) {
+        activityRecordsCache = buildActivityRecords();
+      }
+
+      return activityRecordsCache;
     }
 
     function openModalForDate(dateKey) {
@@ -2734,27 +3019,51 @@
       setModalBusy(true, "save");
       setStatus("Saving...");
 
-      const tasks = sourceKeysToSave.map(function (sourceKey) {
+      const notesToSave = [];
+      const dateKeysToDelete = [];
+
+      sourceKeysToSave.forEach(function (sourceKey) {
         const activities = groupedBySourceKey[sourceKey];
 
         if (activities.length > 0) {
-          return callAppsScript("saveNote", {
+          notesToSave.push({
             dateKey: sourceKey,
             note: encodeActivitiesValue(activities)
           });
+          return;
         }
 
-        return callAppsScript("deleteNote", {
-          dateKey: sourceKey
-        });
+        dateKeysToDelete.push(sourceKey);
       });
 
       if (scheduledBacklogNoteId) {
-        tasks.push(callAppsScript("saveNote", {
+        notesToSave.push({
           dateKey: getBacklogSourceKey(currentYear),
           note: encodeBacklogNotesValue(updatedBacklogNotesAfterScheduling)
-        }));
+        });
       }
+
+      const syncChanges = function () {
+        return callAppsScript("saveChanges", {
+          notes: JSON.stringify(notesToSave),
+          deleteKeys: JSON.stringify(dateKeysToDelete)
+        }).catch(function () {
+          const fallbackTasks = notesToSave.map(function (item) {
+            return callAppsScript("saveNote", {
+              dateKey: item.dateKey,
+              note: item.note
+            });
+          });
+
+          dateKeysToDelete.forEach(function (dateKey) {
+            fallbackTasks.push(callAppsScript("deleteNote", {
+              dateKey: dateKey
+            }));
+          });
+
+          return Promise.all(fallbackTasks);
+        });
+      };
 
       function applyActivitySaveLocally() {
         sourceKeysToSave.forEach(function (sourceKey) {
@@ -2776,7 +3085,7 @@
         }
       }
 
-      Promise.all(tasks)
+      syncChanges()
         .then(function () {
           applyActivitySaveLocally();
           closeModal();
@@ -3841,6 +4150,7 @@
 
     function setLocalNote(sourceKey, value) {
       notesByDate[sourceKey] = value;
+      activityRecordsCache = null;
 
       const year = Number(String(sourceKey).slice(0, 4));
       if (!Number.isInteger(year)) {
@@ -3852,14 +4162,17 @@
       }
 
       notesCacheByYear[year][sourceKey] = value;
+      saveYearCacheToLocalStorage(year, notesCacheByYear[year]);
     }
 
     function removeLocalNote(sourceKey) {
       delete notesByDate[sourceKey];
+      activityRecordsCache = null;
 
       const year = Number(String(sourceKey).slice(0, 4));
       if (Number.isInteger(year) && notesCacheByYear[year]) {
         delete notesCacheByYear[year][sourceKey];
+        saveYearCacheToLocalStorage(year, notesCacheByYear[year]);
       }
     }
 
@@ -3906,6 +4219,7 @@
         };
 
         const script = document.createElement("script");
+        script.async = true;
         script.src = url.toString();
 
         script.onerror = function () {
