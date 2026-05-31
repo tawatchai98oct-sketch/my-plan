@@ -1716,6 +1716,7 @@
     const OLD_RANGE_PREFIX = "__RANGE_ACTIVITY__";
     const YEAR_CACHE_PREFIX = "__PLANNER_YEAR_CACHE_V1__";
     const MAX_VISIBLE_BARS = 3;
+    const SHEET_SYNC_INTERVAL_MS = 60000;
 
     const THAILAND_HOLIDAYS_BY_YEAR = {
       "2026": {
@@ -1804,6 +1805,9 @@
     let isBusy = false;
     let activitySearchTerm = "";
     let lastFocusedElement = null;
+    let hasInitialLoadCompleted = false;
+    let isSheetSyncing = false;
+    let sheetSyncTimerId = null;
 
     let isRangeSelectMode = false;
     let rangeStartDateKey = "";
@@ -2076,7 +2080,8 @@
 
       const loadFromAppsScript = function () {
         return callAppsScript("getNotesForYears", {
-          years: JSON.stringify(yearsNeedingLoad)
+          years: JSON.stringify(yearsNeedingLoad),
+          fresh: forceReload ? "1" : "0"
         })
           .then(function (response) {
             return applyYearData(response.data || {});
@@ -2088,7 +2093,14 @@
           });
       };
 
-      return loadPublishedNoteDataCsv(yearsNeedingLoad, forceReload)
+      if (forceReload) {
+        return loadFromAppsScript()
+          .catch(function () {
+            return loadPublishedNoteDataCsv(yearsNeedingLoad, true).then(applyYearData);
+          });
+      }
+
+      return loadPublishedNoteDataCsv(yearsNeedingLoad, false)
         .then(applyYearData)
         .catch(loadFromAppsScript);
     }
@@ -2233,7 +2245,10 @@
         return Promise.resolve(notesCacheByYear[year]);
       }
 
-      return callAppsScript("getNotesForYear", { year: year })
+      return callAppsScript("getNotesForYear", {
+          year: year,
+          fresh: forceReload ? "1" : "0"
+        })
         .then(function (response) {
           notesCacheByYear[year] = response.data || {};
           saveYearCacheToLocalStorage(year, notesCacheByYear[year]);
@@ -2295,6 +2310,75 @@
       });
 
       return merged;
+    }
+
+    function getLoadYearsForPlanner(year) {
+      return [year - 1, year, year + 1];
+    }
+
+    function startSheetAutoSync() {
+      if (sheetSyncTimerId !== null) {
+        window.clearInterval(sheetSyncTimerId);
+      }
+
+      sheetSyncTimerId = window.setInterval(function () {
+        syncSheetEditsFromBackend(true);
+      }, SHEET_SYNC_INTERVAL_MS);
+    }
+
+    function syncSheetEditsFromBackend(isAutomatic) {
+      if (!hasInitialLoadCompleted || isSheetSyncing || isBusy || !modalBg.hidden || document.hidden) {
+        return Promise.resolve(false);
+      }
+
+      const yearsToLoad = getLoadYearsForPlanner(currentYear);
+      const previousSnapshot = stableStringify(mergeCachedNotes(yearsToLoad));
+      isSheetSyncing = true;
+
+      return loadMultipleYearNotes(yearsToLoad, true)
+        .then(function () {
+          const nextNotes = mergeCachedNotes(yearsToLoad);
+          const nextSnapshot = stableStringify(nextNotes);
+
+          if (nextSnapshot !== previousSnapshot) {
+            notesByDate = nextNotes;
+            activityRecordsCache = null;
+            renderCalendar(currentYear);
+            setStatus("Synced latest Google Sheet edits.", "success");
+            isSheetSyncing = false;
+            return true;
+          }
+
+          if (!isAutomatic) {
+            setStatus("Already up to date with Google Sheet.", "success");
+          }
+
+          isSheetSyncing = false;
+          return false;
+        })
+        .catch(function (error) {
+          isSheetSyncing = false;
+
+          if (!isAutomatic) {
+            setStatus("Sync failed: " + error.message, "warning");
+          }
+
+          return false;
+        });
+    }
+
+    function stableStringify(value) {
+      if (value === null || typeof value !== "object") {
+        return JSON.stringify(value);
+      }
+
+      if (Array.isArray(value)) {
+        return "[" + value.map(stableStringify).join(",") + "]";
+      }
+
+      return "{" + Object.keys(value).sort().map(function (key) {
+        return JSON.stringify(key) + ":" + stableStringify(value[key]);
+      }).join(",") + "}";
     }
 
     function renderCalendar(year) {
@@ -2955,6 +3039,33 @@
       const rows = Array.from(activityList.children);
       const newActivities = [];
 
+      if (pendingScheduledBacklogNoteId && rows.length === 1) {
+        const row = rows[0];
+        const titleInput = row.querySelector(".activity-title-input");
+        const startInput = row.querySelector(".activity-start-input");
+        const endInput = row.querySelector(".activity-end-input");
+        const title = titleInput ? titleInput.value.trim() : "";
+        const start = startInput ? startInput.value : "";
+        const rawEnd = endInput ? endInput.value : "";
+
+        if (title && !start && !rawEnd) {
+          const noteToUpdate = backlogNotes.find(function (note) {
+            return note.id === pendingScheduledBacklogNoteId;
+          });
+
+          if (!noteToUpdate) {
+            setStatus("Could not find that note.", "error");
+            return;
+          }
+
+          noteToUpdate.text = title;
+          noteToUpdate.updatedAt = new Date().toISOString();
+          closeModal();
+          persistBacklogNotes("Note updated.");
+          return;
+        }
+      }
+
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         const titleInput = row.querySelector(".activity-title-input");
@@ -2977,9 +3088,12 @@
         }
 
         if (!isValidDateKey(start) || !isValidDateKey(end)) {
-          showRowError(row, "Activity " + String(i + 1) + " needs valid dates.");
+          const dateError = pendingScheduledBacklogNoteId
+            ? "Activity " + String(i + 1) + " needs valid dates. To keep this as an undated note, clear both date fields."
+            : "Activity " + String(i + 1) + " needs valid dates.";
+          showRowError(row, dateError);
           startInput.focus();
-          setStatus("Activity " + String(i + 1) + " needs valid dates.", "error");
+          setStatus(dateError, "error");
           return;
         }
 
@@ -3616,11 +3730,21 @@
         const actions = document.createElement("div");
         actions.className = "backlog-note-actions";
 
+        const editButton = document.createElement("button");
+        editButton.type = "button";
+        editButton.className = "backlog-schedule-btn";
+        editButton.textContent = "Edit";
+        editButton.title = "Edit this note without assigning a date.";
+        editButton.addEventListener("click", function () {
+          editBacklogNote(note.id);
+        });
+        actions.appendChild(editButton);
+
         const scheduleButton = document.createElement("button");
         scheduleButton.type = "button";
         scheduleButton.className = "backlog-schedule-btn";
-        scheduleButton.textContent = "Schedule / Edit";
-        scheduleButton.title = "Schedule this note. You can edit the title before saving.";
+        scheduleButton.textContent = "Schedule";
+        scheduleButton.title = "Turn this note into a dated activity.";
         scheduleButton.addEventListener("click", function () {
           scheduleBacklogNote(note.id);
         });
@@ -3747,7 +3871,7 @@
       selectedSourceKeys = [];
       pendingScheduledBacklogNoteId = noteId;
 
-      modalDate.textContent = "Schedule Note";
+      modalDate.textContent = "Edit / Schedule Note";
       activityList.innerHTML = "";
 
       addActivityRow({
@@ -3760,7 +3884,7 @@
       });
 
       showModalAndFocus();
-      setStatus("Choose start and end dates, then save. The note will become an activity.", "success");
+      setStatus("Edit the text and save with blank dates to keep it as a note, or choose dates to schedule it.", "success");
     }
 
     function formatBacklogTimestamp(value) {
@@ -4248,7 +4372,19 @@
       });
     }
 
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden) {
+        syncSheetEditsFromBackend(true);
+      }
+    });
+
+    window.addEventListener("focus", function () {
+      syncSheetEditsFromBackend(true);
+    });
+
     loadNotesForYear(currentYear, false).then(function () {
+      hasInitialLoadCompleted = true;
+      startSheetAutoSync();
       scrollCurrentMonthIntoView("auto");
     });
   </script>
