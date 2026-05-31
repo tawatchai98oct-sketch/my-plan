@@ -1705,13 +1705,11 @@
 
   <script>
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwHUmxDQ6GaMJWKRTrxcin5g-UrrwKIOodInRKKnoCpbINW6_gCq0eSDSxQO7R8eizIyg/exec";
-    const EXPECTED_BACKEND_VERSION = "planner-sheet-sync-v2026-05-31-verified-v2";
+    const EXPECTED_BACKEND_VERSION = "planner-one-sheet-structured-v2026-05-31-v1";
 
-    // Published Google Sheet CSV links supplied by the site owner.
-    // These links are read-only. New notes still need APPS_SCRIPT_URL to save to Google Sheets.
+    // Published Google Sheet CSV link for the single "Note Data" sheet.
+    // This is read-only. New/edit/delete actions still use APPS_SCRIPT_URL to write to Google Sheets.
     const NOTE_DATA_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSwp_rbUc5U4IRGdTAmQ0r2RwopuLKMTlPd8VNUMq05JJ4jdEhdJ4rquqdorc4i97YSfhO4CongHx40/pub?gid=892215063&single=true&output=csv";
-    const BACKEND_SETUP_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSwp_rbUc5U4IRGdTAmQ0r2RwopuLKMTlPd8VNUMq05JJ4jdEhdJ4rquqdorc4i97YSfhO4CongHx40/pub?gid=1540282495&single=true&output=csv";
-    const NOTES_LOG_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSwp_rbUc5U4IRGdTAmQ0r2RwopuLKMTlPd8VNUMq05JJ4jdEhdJ4rquqdorc4i97YSfhO4CongHx40/pub?gid=225167706&single=true&output=csv";
 
     const ACTIVITIES_PREFIX = "__ACTIVITIES_V2__";
     const UNSCHEDULED_NOTES_PREFIX = "__UNSCHEDULED_NOTES_V1__";
@@ -2086,9 +2084,15 @@
         return result;
       }
 
-      const header = rows[0].map(function (cell) {
-        return String(cell || "").trim().toLowerCase().replace(/\s+/g, "");
-      });
+      const header = rows[0].map(normalizeCsvHeaderName);
+      const hasStructuredColumns =
+        header.indexOf("recordtype") >= 0 ||
+        header.indexOf("activity") >= 0 ||
+        header.indexOf("startdate") >= 0;
+
+      if (hasStructuredColumns) {
+        return parseStructuredNoteDataCsvRows(rows.slice(1), header, wantedYears, result);
+      }
 
       let dateKeyIndex = header.indexOf("datekey");
       let noteIndex = header.indexOf("note");
@@ -2100,7 +2104,7 @@
         firstDataRowIndex = 0;
 
         if (!rows[0] || !isValidPlannerStorageKey(rows[0][dateKeyIndex])) {
-          throw new Error("Published Note Data CSV must contain DateKey and Note columns.");
+          throw new Error("Published Note Data CSV must contain the structured Note Data columns or legacy DateKey and Note columns.");
         }
       }
 
@@ -2120,6 +2124,168 @@
       });
 
       return result;
+    }
+
+    function parseStructuredNoteDataCsvRows(dataRows, header, wantedYears, result) {
+      const columnIndex = {
+        dateKey: getCsvHeaderIndex(header, ["datekey"]),
+        year: getCsvHeaderIndex(header, ["year"]),
+        recordType: getCsvHeaderIndex(header, ["recordtype", "type"]),
+        recordId: getCsvHeaderIndex(header, ["recordid", "id"]),
+        activity: getCsvHeaderIndex(header, ["activity", "activityname", "title"]),
+        note: getCsvHeaderIndex(header, ["note", "notetext"]),
+        status: getCsvHeaderIndex(header, ["status"]),
+        startDate: getCsvHeaderIndex(header, ["startdate", "start"]),
+        endDate: getCsvHeaderIndex(header, ["enddate", "end"])
+      };
+
+      const activitiesBySourceKey = {};
+      const notesByYear = {};
+
+      dataRows.forEach(function (row) {
+        const dateKey = normalizeCsvDateKey(getCsvCell(row, columnIndex.dateKey));
+        const yearText = normalizeCsvYear(getCsvCell(row, columnIndex.year)) || (dateKey ? dateKey.slice(0, 4) : "");
+        const recordType = getCsvCell(row, columnIndex.recordType).toLowerCase();
+        const recordId = getCsvCell(row, columnIndex.recordId);
+        const activityText = getCsvCell(row, columnIndex.activity);
+        const noteText = getCsvCell(row, columnIndex.note);
+        const status = getCsvCell(row, columnIndex.status);
+        const startDate = normalizeCsvDateKey(getCsvCell(row, columnIndex.startDate)) || (isValidDateKey(dateKey) ? dateKey : "");
+        const endDate = normalizeCsvDateKey(getCsvCell(row, columnIndex.endDate)) || startDate;
+
+        if ((recordType === "activity" || (!recordType && activityText)) && activityText && isValidDateKey(startDate)) {
+          const sourceKey = startDate;
+          const year = sourceKey.slice(0, 4);
+
+          if (!wantedYears[year]) {
+            return;
+          }
+
+          if (!activitiesBySourceKey[sourceKey]) {
+            activitiesBySourceKey[sourceKey] = [];
+          }
+
+          activitiesBySourceKey[sourceKey].push({
+            id: recordId || "sheet_activity_" + Math.abs(hashText(sourceKey + "|" + activityText + "|" + endDate)),
+            title: activityText,
+            start: startDate,
+            end: endDate,
+            completed: isCsvDoneStatus(status)
+          });
+          return;
+        }
+
+        if (recordType === "note" || noteText) {
+          const noteYear = yearText || (dateKey ? dateKey.slice(0, 4) : "");
+          if (!noteYear || !wantedYears[noteYear] || !noteText) {
+            return;
+          }
+
+          if (!notesByYear[noteYear]) {
+            notesByYear[noteYear] = [];
+          }
+
+          notesByYear[noteYear].push({
+            id: recordId || "sheet_note_" + Math.abs(hashText(noteYear + "|" + noteText)),
+            text: noteText,
+            createdAt: "",
+            updatedAt: ""
+          });
+        }
+      });
+
+      Object.keys(activitiesBySourceKey).forEach(function (sourceKey) {
+        const year = sourceKey.slice(0, 4);
+        activitiesBySourceKey[sourceKey].sort(function (a, b) {
+          const statusSort = Number(a.completed) - Number(b.completed);
+          if (statusSort !== 0) {
+            return statusSort;
+          }
+          if (a.end !== b.end) {
+            return compareDateKeys(a.end, b.end);
+          }
+          return a.title.localeCompare(b.title);
+        });
+
+        result[year][sourceKey] = encodeActivitiesValue(activitiesBySourceKey[sourceKey]);
+      });
+
+      Object.keys(notesByYear).forEach(function (year) {
+        notesByYear[year].sort(function (a, b) {
+          return a.text.localeCompare(b.text);
+        });
+
+        result[year][year + "-unscheduled-notes"] = encodeBacklogNotesValue(notesByYear[year]);
+      });
+
+      return result;
+    }
+
+    function normalizeCsvHeaderName(value) {
+      return String(value || "").trim().toLowerCase().replace(/\s+/g, "");
+    }
+
+    function getCsvHeaderIndex(header, names) {
+      for (let i = 0; i < names.length; i++) {
+        const index = header.indexOf(names[i]);
+        if (index >= 0) {
+          return index;
+        }
+      }
+      return -1;
+    }
+
+    function getCsvCell(row, index) {
+      if (index < 0 || index >= row.length) {
+        return "";
+      }
+      return String(row[index] || "").trim();
+    }
+
+    function normalizeCsvDateKey(value) {
+      const text = String(value || "").trim();
+
+      if (isValidDateKey(text)) {
+        return text;
+      }
+
+      const slashMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (slashMatch) {
+        const month = Number(slashMatch[1]);
+        const day = Number(slashMatch[2]);
+        const year = Number(slashMatch[3]);
+        const date = new Date(Date.UTC(year, month - 1, day));
+
+        if (
+          date.getUTCFullYear() === year &&
+          date.getUTCMonth() === month - 1 &&
+          date.getUTCDate() === day
+        ) {
+          return [
+            String(year).padStart(4, "0"),
+            String(month).padStart(2, "0"),
+            String(day).padStart(2, "0")
+          ].join("-");
+        }
+      }
+
+      return "";
+    }
+
+    function normalizeCsvYear(value) {
+      const match = String(value || "").match(/\d{4}/);
+      return match ? match[0] : "";
+    }
+
+    function isCsvDoneStatus(value) {
+      const text = String(value || "").trim().toLowerCase();
+      return text === "done" ||
+        text === "completed" ||
+        text === "complete" ||
+        text === "true" ||
+        text === "yes" ||
+        text === "y" ||
+        text === "1";
     }
 
     function parseCsvRows(csvText) {
