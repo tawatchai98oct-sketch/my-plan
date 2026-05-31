@@ -1714,7 +1714,6 @@
     const ACTIVITIES_PREFIX = "__ACTIVITIES_V2__";
     const UNSCHEDULED_NOTES_PREFIX = "__UNSCHEDULED_NOTES_V1__";
     const OLD_RANGE_PREFIX = "__RANGE_ACTIVITY__";
-    const YEAR_CACHE_PREFIX = "__PLANNER_YEAR_CACHE_V1__";
     const MAX_VISIBLE_BARS = 3;
     const SHEET_SYNC_INTERVAL_MS = 60000;
 
@@ -2212,16 +2211,50 @@
     }
 
     function applyBackendDataByYear(dataByYear, yearsToApply) {
-      const source = dataByYear && typeof dataByYear === "object" && !Array.isArray(dataByYear) ? dataByYear : {};
+      const normalized = normalizeBackendDataByYear(dataByYear, yearsToApply);
 
       yearsToApply.forEach(function (yearToApply) {
-        const rawYearData = source[String(yearToApply)] || source[yearToApply] || {};
-        const yearData = rawYearData && typeof rawYearData === "object" && !Array.isArray(rawYearData) ? rawYearData : {};
-        notesCacheByYear[yearToApply] = yearData;
+        notesCacheByYear[yearToApply] = normalized[String(yearToApply)] || {};
         authoritativeSheetYears[String(yearToApply)] = true;
       });
 
       return notesCacheByYear;
+    }
+
+    function normalizeBackendDataByYear(rawData, yearsToApply) {
+      const result = {};
+      const yearLookup = {};
+      const source = rawData && typeof rawData === "object" && !Array.isArray(rawData) ? rawData : {};
+
+      yearsToApply.forEach(function (yearToApply) {
+        const year = String(yearToApply);
+        result[year] = {};
+        yearLookup[year] = true;
+      });
+
+      Object.keys(source).forEach(function (key) {
+        const value = source[key];
+        const keyText = String(key || "").trim();
+
+        if (/^\d{4}$/.test(keyText) && yearLookup[keyText] && value && typeof value === "object" && !Array.isArray(value)) {
+          Object.keys(value).forEach(function (dateKey) {
+            const storageKey = String(dateKey || "").trim();
+            if (isValidPlannerStorageKey(storageKey) && storageKey.slice(0, 4) === keyText) {
+              result[keyText][storageKey] = String(value[dateKey] || "");
+            }
+          });
+          return;
+        }
+
+        if (isValidPlannerStorageKey(keyText)) {
+          const year = keyText.slice(0, 4);
+          if (yearLookup[year]) {
+            result[year][keyText] = String(value || "");
+          }
+        }
+      });
+
+      return result;
     }
 
     function getYearsForChangeConfirmation(notesToSave, dateKeysToDelete) {
@@ -2238,13 +2271,13 @@
       return normalizeYearList(getLoadYearsForPlanner(currentYear).concat(getYearsForStorageKeys(storageKeys)));
     }
 
-    function confirmBackendChanges(notesToSave, dateKeysToDelete, response) {
+    function confirmBackendChanges(notesToSave, dateKeysToDelete) {
       const yearsToLoad = getYearsForChangeConfirmation(notesToSave, dateKeysToDelete);
-      const applyReturnedData = response && response.data
-        ? Promise.resolve(applyBackendDataByYear(response.data, yearsToLoad))
-        : loadMultipleYearNotes(yearsToLoad, true);
 
-      return applyReturnedData.then(function () {
+      // Always read the sheet again after a write. Some older Apps Script deployments
+      // return a flat data object or stale data in the save response, which caused false
+      // confirmation failures and disappearing activities after refresh.
+      return loadMultipleYearNotes(yearsToLoad, true).then(function () {
         const latestNotes = mergeCachedNotes(yearsToLoad);
         const missingSavedKeys = (notesToSave || []).filter(function (item) {
           return String(latestNotes[item.dateKey] || "") !== String(item.note || "");
@@ -2269,7 +2302,7 @@
 
           throw new Error(
             "Google Sheet did not return the confirmed change (" + parts.join("; ") + "). " +
-            "Update the deployed Apps Script with the included App Script.txt and confirm APPS_SCRIPT_URL points to that deployment."
+            "This means the live Apps Script did not persist the same Note Data rows that the website requested."
           );
         }
 
@@ -2277,6 +2310,62 @@
         activityRecordsCache = null;
         return latestNotes;
       });
+    }
+
+    function saveAndConfirmPlannerChanges(notesToSave, dateKeysToDelete) {
+      const yearsToConfirm = getYearsForChangeConfirmation(notesToSave, dateKeysToDelete);
+      const primaryPayload = {
+        notes: JSON.stringify(notesToSave || []),
+        deleteKeys: JSON.stringify(dateKeysToDelete || []),
+        returnYears: JSON.stringify(yearsToConfirm)
+      };
+
+      return callAppsScript("saveChanges", primaryPayload)
+        .then(function () {
+          return confirmBackendChanges(notesToSave, dateKeysToDelete);
+        })
+        .catch(function (primaryError) {
+          // Retry with single-row actions. This works with both the current backend and
+          // several older deployments that saved saveNote/deleteNote correctly but had
+          // weaker saveChanges behavior.
+          return savePlannerChangesIndividually(notesToSave, dateKeysToDelete, yearsToConfirm)
+            .then(function () {
+              return confirmBackendChanges(notesToSave, dateKeysToDelete);
+            })
+            .catch(function (fallbackError) {
+              throw new Error(
+                fallbackError.message +
+                " Primary bulk save error: " +
+                (primaryError && primaryError.message ? primaryError.message : String(primaryError))
+              );
+            });
+        });
+    }
+
+    function savePlannerChangesIndividually(notesToSave, dateKeysToDelete, yearsToConfirm) {
+      let chain = Promise.resolve();
+      const returnYears = JSON.stringify(yearsToConfirm || []);
+
+      (notesToSave || []).forEach(function (item) {
+        chain = chain.then(function () {
+          return callAppsScript("saveNote", {
+            dateKey: item.dateKey,
+            note: item.note,
+            returnYears: returnYears
+          });
+        });
+      });
+
+      (dateKeysToDelete || []).forEach(function (dateKey) {
+        chain = chain.then(function () {
+          return callAppsScript("deleteNote", {
+            dateKey: dateKey,
+            returnYears: returnYears
+          });
+        });
+      });
+
+      return chain;
     }
 
     function hasAuthoritativeSheetDataForYear(year) {
@@ -3134,35 +3223,7 @@
         }
       }
 
-      const yearsToConfirm = getYearsForChangeConfirmation(notesToSave, dateKeysToDelete);
-
-      const syncChanges = function () {
-        return callAppsScript("saveChanges", {
-          notes: JSON.stringify(notesToSave),
-          deleteKeys: JSON.stringify(dateKeysToDelete),
-          returnYears: JSON.stringify(yearsToConfirm)
-        }).catch(function () {
-          const fallbackTasks = notesToSave.map(function (item) {
-            return callAppsScript("saveNote", {
-              dateKey: item.dateKey,
-              note: item.note
-            });
-          });
-
-          dateKeysToDelete.forEach(function (dateKey) {
-            fallbackTasks.push(callAppsScript("deleteNote", {
-              dateKey: dateKey
-            }));
-          });
-
-          return Promise.all(fallbackTasks);
-        });
-      };
-
-      syncChanges()
-        .then(function (response) {
-          return confirmBackendChanges(notesToSave, dateKeysToDelete, response);
-        })
+      saveAndConfirmPlannerChanges(notesToSave, dateKeysToDelete)
         .then(function () {
           closeModal();
           renderCalendar(currentYear);
@@ -3735,24 +3796,12 @@
 
       const normalizedNotes = normalizeBacklogNotes(backlogNotes);
       const backlogSourceKey = getBacklogSourceKey(currentYear);
-      const saveRequest = normalizedNotes.length > 0
-        ? callAppsScript("saveNote", {
-            dateKey: backlogSourceKey,
-            note: encodeBacklogNotesValue(normalizedNotes)
-          })
-        : callAppsScript("deleteNote", {
-            dateKey: backlogSourceKey
-          });
-
       const notesToSave = normalizedNotes.length > 0
         ? [{ dateKey: backlogSourceKey, note: encodeBacklogNotesValue(normalizedNotes) }]
         : [];
       const dateKeysToDelete = normalizedNotes.length > 0 ? [] : [backlogSourceKey];
 
-      saveRequest
-        .then(function (response) {
-          return confirmBackendChanges(notesToSave, dateKeysToDelete, response);
-        })
+      saveAndConfirmPlannerChanges(notesToSave, dateKeysToDelete)
         .then(function () {
           isBusy = false;
           addBacklogNoteButton.disabled = false;
@@ -4013,14 +4062,7 @@
       const completedNoteValue = encodeActivitiesValue(updatedActivities);
       const notesToSave = [{ dateKey: activity.sourceKey, note: completedNoteValue }];
 
-      callAppsScript("saveNote", {
-        dateKey: activity.sourceKey,
-        note: completedNoteValue,
-        returnYears: JSON.stringify(getYearsForChangeConfirmation(notesToSave, []))
-      })
-        .then(function (response) {
-          return confirmBackendChanges(notesToSave, [], response);
-        })
+      saveAndConfirmPlannerChanges(notesToSave, [])
         .then(function () {
           isBusy = false;
           renderCalendar(currentYear);
