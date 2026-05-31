@@ -1808,6 +1808,7 @@
     let hasInitialLoadCompleted = false;
     let isSheetSyncing = false;
     let sheetSyncTimerId = null;
+    let authoritativeSheetYears = {};
 
     let isRangeSelectMode = false;
     let rangeStartDateKey = "";
@@ -2070,8 +2071,10 @@
 
       const applyYearData = function (dataByYear) {
         yearsNeedingLoad.forEach(function (yearToLoad) {
-          const yearData = dataByYear[String(yearToLoad)] || dataByYear[yearToLoad] || {};
+          const rawYearData = dataByYear[String(yearToLoad)] || dataByYear[yearToLoad] || {};
+          const yearData = rawYearData && typeof rawYearData === "object" && !Array.isArray(rawYearData) ? rawYearData : {};
           notesCacheByYear[yearToLoad] = yearData;
+          authoritativeSheetYears[String(yearToLoad)] = true;
           saveYearCacheToLocalStorage(yearToLoad, yearData);
         });
 
@@ -2251,6 +2254,7 @@
         })
         .then(function (response) {
           notesCacheByYear[year] = response.data || {};
+          authoritativeSheetYears[String(year)] = true;
           saveYearCacheToLocalStorage(year, notesCacheByYear[year]);
           return notesCacheByYear[year];
         });
@@ -2310,6 +2314,10 @@
       });
 
       return merged;
+    }
+
+    function hasAuthoritativeSheetDataForYear(year) {
+      return Object.prototype.hasOwnProperty.call(authoritativeSheetYears, String(year));
     }
 
     function getLoadYearsForPlanner(year) {
@@ -3651,12 +3659,19 @@
 
     function loadBacklogNotesForYear(year) {
       const sourceKey = getBacklogSourceKey(year);
-      const sheetValue = notesByDate[sourceKey] || "";
+      const hasSheetBacklogKey = Object.prototype.hasOwnProperty.call(notesByDate, sourceKey);
+      const sheetValue = hasSheetBacklogKey ? String(notesByDate[sourceKey] || "") : "";
       const sheetNotes = parseBacklogNotesValue(sheetValue);
 
-      if (sheetNotes.length > 0 || sheetValue) {
+      if (hasSheetBacklogKey) {
         backlogNotes = sheetNotes;
         saveBacklogNotesToLocalStorage(year, backlogNotes);
+        return;
+      }
+
+      if (hasAuthoritativeSheetDataForYear(year)) {
+        backlogNotes = [];
+        clearBacklogNotesFromLocalStorage(year);
         return;
       }
 
@@ -3668,6 +3683,14 @@
         return normalizeBacklogNotes(JSON.parse(window.localStorage.getItem(getBacklogStorageKey(year)) || "[]"));
       } catch (error) {
         return [];
+      }
+    }
+
+    function clearBacklogNotesFromLocalStorage(year) {
+      try {
+        window.localStorage.removeItem(getBacklogStorageKey(year));
+      } catch (error) {
+        // Local storage can be unavailable in private or restricted browser modes.
       }
     }
 
