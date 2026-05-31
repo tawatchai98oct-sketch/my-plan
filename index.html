@@ -1835,7 +1835,7 @@
 
   <script>
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwHUmxDQ6GaMJWKRTrxcin5g-UrrwKIOodInRKKnoCpbINW6_gCq0eSDSxQO7R8eizIyg/exec";
-    const EXPECTED_BACKEND_VERSION = "planner-one-sheet-structured-v2026-05-31-v2-optimized";
+    const EXPECTED_BACKEND_VERSION = "planner-one-sheet-structured-v2026-05-31-v3-stable";
 
     // Published Google Sheet CSV link for the single "Note Data" sheet.
     // This is read-only. New/edit/delete actions still use APPS_SCRIPT_URL to write to Google Sheets.
@@ -1846,8 +1846,10 @@
     const OLD_RANGE_PREFIX = "__RANGE_ACTIVITY__";
     const MAX_VISIBLE_BARS = 3;
     const SHEET_SYNC_INTERVAL_MS = 300000; // 5 minutes; reduces repeated Google Sheet reads.
-    const FAST_READS_USE_PUBLISHED_CSV = true; // Use the published CSV for read-only loads; writes still use Apps Script.
+    const FAST_READS_USE_PUBLISHED_CSV = false; // Disabled by default: published Google Sheet CSV is cached and can show deleted/scheduled notes after refresh.
     const FOCUS_SYNC_MIN_INTERVAL_MS = 120000; // Throttle focus/visibility refreshes.
+    const BROWSER_SHEET_CACHE_KEY = "planner_sheet_cache_v3_stable";
+    const BROWSER_SHEET_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // Local first-paint cache; Apps Script remains authoritative.
 
     const THAILAND_HOLIDAYS_BY_YEAR = {
       "2026": {
@@ -1941,6 +1943,7 @@
     let sheetSyncTimerId = null;
     let backendHealthCache = null;
     let authoritativeSheetYears = {};
+    let browserCachedSheetYears = {};
     let lastSheetSyncAt = 0;
     let searchDebounceTimerId = null;
 
@@ -2111,17 +2114,34 @@
     function loadNotesForYear(year, forceReload) {
       const yearsToLoad = getLoadYearsForPlanner(year);
       const shouldForceReload = forceReload === true;
-      const hasCompleteCachedData = !shouldForceReload && yearsToLoad.every(function (yearToLoad) {
+
+      if (!shouldForceReload) {
+        hydrateCacheFromBrowser(yearsToLoad);
+      }
+
+      const hasCompleteAuthoritativeData = !shouldForceReload && yearsToLoad.every(function (yearToLoad) {
         return hasAuthoritativeSheetDataForYear(yearToLoad);
       });
 
-      if (hasCompleteCachedData) {
+      if (hasCompleteAuthoritativeData) {
         notesByDate = mergeCachedNotes(yearsToLoad);
         activityRecordsCache = null;
         renderCalendar(year);
         setStatus("Loaded from browser cache. Checking Google Sheet in background...", "success");
         syncSheetEditsFromBackend(true);
         return Promise.resolve(notesByDate);
+      }
+
+      const hasCompleteBrowserData = !shouldForceReload && yearsToLoad.every(function (yearToLoad) {
+        return hasBrowserCachedSheetDataForYear(yearToLoad);
+      });
+
+      if (hasCompleteBrowserData) {
+        notesByDate = mergeCachedNotes(yearsToLoad);
+        activityRecordsCache = null;
+        renderCalendar(year);
+        setStatus("Loaded saved local copy. Checking Google Sheet...", "loading");
+        return refreshYearsFromBackend(yearsToLoad, year, false);
       }
 
       showCalendarLoading("Loading notes from Google Sheet...");
@@ -2548,14 +2568,95 @@
       }));
     }
 
-    function applyBackendDataByYear(dataByYear, yearsToApply) {
-      const normalized = normalizeBackendDataByYear(dataByYear, yearsToApply);
+    function getBrowserSheetCachePayload() {
+      if (!window.localStorage) {
+        return null;
+      }
 
-      yearsToApply.forEach(function (yearToApply) {
-        notesCacheByYear[yearToApply] = normalized[String(yearToApply)] || {};
-        authoritativeSheetYears[String(yearToApply)] = true;
+      try {
+        const raw = window.localStorage.getItem(BROWSER_SHEET_CACHE_KEY);
+        if (!raw) {
+          return null;
+        }
+
+        const payload = JSON.parse(raw);
+        if (!payload || payload.version !== EXPECTED_BACKEND_VERSION || !payload.years) {
+          return null;
+        }
+
+        return payload;
+      } catch (error) {
+        try {
+          window.localStorage.removeItem(BROWSER_SHEET_CACHE_KEY);
+        } catch (removeError) {
+          // Ignore storage cleanup failures.
+        }
+        return null;
+      }
+    }
+
+    function hydrateCacheFromBrowser(yearsToLoad) {
+      const payload = getBrowserSheetCachePayload();
+      if (!payload) {
+        return false;
+      }
+
+      let didHydrate = false;
+      const now = Date.now();
+
+      normalizeYearList(yearsToLoad).forEach(function (year) {
+        const yearKey = String(year);
+        const entry = payload.years[yearKey];
+        if (!entry || !entry.data || !entry.savedAt || now - Number(entry.savedAt) > BROWSER_SHEET_CACHE_TTL_MS) {
+          return;
+        }
+
+        if (!hasAuthoritativeSheetDataForYear(yearKey)) {
+          notesCacheByYear[year] = entry.data;
+          browserCachedSheetYears[yearKey] = true;
+          didHydrate = true;
+        }
       });
 
+      return didHydrate;
+    }
+
+    function persistYearsToBrowserCache(yearsToPersist) {
+      if (!window.localStorage) {
+        return;
+      }
+
+      try {
+        const payload = getBrowserSheetCachePayload() || {
+          version: EXPECTED_BACKEND_VERSION,
+          years: {}
+        };
+
+        const now = Date.now();
+        normalizeYearList(yearsToPersist).forEach(function (year) {
+          payload.years[String(year)] = {
+            savedAt: now,
+            data: notesCacheByYear[year] || {}
+          };
+        });
+
+        window.localStorage.setItem(BROWSER_SHEET_CACHE_KEY, JSON.stringify(payload));
+      } catch (error) {
+        // Browser storage can be unavailable or full; the app still works via Apps Script.
+      }
+    }
+
+    function applyBackendDataByYear(dataByYear, yearsToApply) {
+      const normalized = normalizeBackendDataByYear(dataByYear, yearsToApply);
+      const normalizedYears = normalizeYearList(yearsToApply);
+
+      normalizedYears.forEach(function (yearToApply) {
+        notesCacheByYear[yearToApply] = normalized[String(yearToApply)] || {};
+        authoritativeSheetYears[String(yearToApply)] = true;
+        browserCachedSheetYears[String(yearToApply)] = true;
+      });
+
+      persistYearsToBrowserCache(normalizedYears);
       return notesCacheByYear;
     }
 
@@ -2763,6 +2864,10 @@
 
     function hasAuthoritativeSheetDataForYear(year) {
       return Object.prototype.hasOwnProperty.call(authoritativeSheetYears, String(year));
+    }
+
+    function hasBrowserCachedSheetDataForYear(year) {
+      return Object.prototype.hasOwnProperty.call(browserCachedSheetYears, String(year));
     }
 
     function getLoadYearsForPlanner(year) {
